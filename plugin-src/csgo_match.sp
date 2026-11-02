@@ -871,6 +871,12 @@ void StartWarmup()
 	g_State = State_Warmup;
 
 	ServerCommand("exec csgo_match/warmup.cfg");
+	// No time or round limit can end the match during warmup, and the plugin
+	// handles map changes itself (no end-of-match map vote).
+	ServerCommand("mp_timelimit 0");
+	ServerCommand("mp_endmatch_votenextmap 0");
+	ServerCommand("mp_match_end_changelevel 0");
+	ServerCommand("mp_match_end_restart 0");
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_start");
 
@@ -933,13 +939,11 @@ void StartLive()
 	if (g_cvFriendlyFire.IntValue >= 0)
 		ServerCommand("mp_friendlyfire %d", g_cvFriendlyFire.IntValue);
 	ServerCommand("mp_backup_round_file \"%s\"", g_BackupPrefix);
-	if (g_SeriesActive)
-	{
-		// The plugin moves to the next series map itself.
-		ServerCommand("mp_endmatch_votenextmap 0");
-		ServerCommand("mp_match_end_changelevel 0");
-		ServerCommand("mp_match_end_restart 0");
-	}
+	// Only mp_maxrounds ends a match; the plugin handles what comes next.
+	ServerCommand("mp_timelimit 0");
+	ServerCommand("mp_endmatch_votenextmap 0");
+	ServerCommand("mp_match_end_changelevel 0");
+	ServerCommand("mp_match_end_restart 0");
 	ServerCommand("mp_restartgame 3");
 
 	StartDemo(stamp);
@@ -1722,7 +1726,20 @@ public Action Timer_StripToKnife(Handle timer, any userid)
 public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	if (g_State != State_Live)
+	{
+		// The game ended the match by itself outside a live match (e.g. a time or
+		// round limit from another config kicking in when a second player joins).
+		// Log why and go back to warmup instead of sitting on the map vote.
+		if (g_State == State_Warmup || g_State == State_Knife || g_State == State_SideSelect
+			|| (g_State == State_None && IsMatchMode()))
+		{
+			LogMessage("Unexpected match end in state %d: mp_timelimit=%d mp_maxrounds=%d game_type=%d game_mode=%d players=%d",
+				g_State, GetCvarInt("mp_timelimit"), GetCvarInt("mp_maxrounds"), GetCvarInt("game_type"),
+				GetCvarInt("game_mode"), GetClientCount(true));
+			CreateTimer(3.0, Timer_RecoverWarmup, _, TIMER_FLAG_NO_MAPCHANGE);
+		}
 		return;
+	}
 
 	g_State = State_None;
 	g_Paused = false;
@@ -1733,6 +1750,16 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 		return;
 	}
 	Announce("Match over — GG! Change map or type \x04!restart\x01 for a new match.");
+}
+
+public Action Timer_RecoverWarmup(Handle timer)
+{
+	if (g_State == State_Live || g_State == State_Duel || g_State == State_Arena || g_State == State_Movement || g_State == State_Practice)
+		return Plugin_Stop;
+	Announce("The game tried to end the match before it started — back to warmup.");
+	ServerCommand("mp_restartgame 1");
+	StartWarmup();
+	return Plugin_Stop;
 }
 
 public Action Timer_StopDemo(Handle timer)

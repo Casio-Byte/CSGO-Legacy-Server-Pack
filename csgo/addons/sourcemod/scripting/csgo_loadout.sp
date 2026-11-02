@@ -395,7 +395,19 @@ public Action Timer_ApplyHeld(Handle timer, int userid)
 		RefreshWeapon(client, defs[i]);
 	if (knifeNeeded)
 		RefreshWeapon(client, 42);
+
+	// The default arms were already drawn before the loadout loaded, so custom
+	// gloves would sit on top of them. A full update makes the game redraw the
+	// view model with only the custom gloves.
+	if (g_GloveDef[client] != 0 && g_GlovePaint[client] != 0)
+		ForceViewRefresh(client, 0.3);
 	return Plugin_Stop;
+}
+
+void ForceViewRefresh(int client, float delay)
+{
+	if (GetFeatureStatus(FeatureType_Native, "PTaH_ForceFullUpdate") == FeatureStatus_Available)
+		CreateTimer(delay, Timer_FullUpdate, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 bool HasSkinFor(int client, int def)
@@ -4092,7 +4104,8 @@ void ApplyPreset(int client, const char[] name)
 	if (knife != 0)
 		RefreshWeapon(client, 42);
 	ApplyGloves(client, true);
-	if (stickers && heldCount > 0 && GetFeatureStatus(FeatureType_Native, "PTaH_ForceFullUpdate") == FeatureStatus_Available)
-		CreateTimer(0.3, Timer_FullUpdate, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+	// Redraw the view: new gloves over old arms, and the new sticker crafts.
+	if (glove != 0 || (stickers && heldCount > 0))
+		ForceViewRefresh(client, 0.3);
 	ShowPreview(client, 3.0);
 }
