@@ -700,6 +700,9 @@ public void OnConfigsExecuted()
 	if (FileExists("cfg/csgo_match/server_settings.cfg"))
 		ServerCommand("exec csgo_match/server_settings.cfg");
 	ApplyDownloadSettings();
+	// No end-of-match map vote in any mode - the plugin (or !map / !gamemode)
+	// decides what comes next.
+	ServerCommand("mp_endmatch_votenextmap 0");
 	LoadSavedOptions();
 	g_KnifeEnabled = g_cvKnifeDefault.BoolValue;
 	ApplyModeOnMapStart();
@@ -2773,6 +2776,10 @@ void ApplyModeOnMapStart()
 	}
 
 	// Casual / Deathmatch / Arms Race / Demolition: let the game run its own mode.
+	// When a game ends, restart it on the same map instead of a map vote.
+	ServerCommand("mp_endmatch_votenextmap 0");
+	ServerCommand("mp_match_end_changelevel 0");
+	ServerCommand("mp_match_end_restart 1");
 	DuelCleanup();
 	ResetMatch();
 	StopDemo();
