@@ -104,7 +104,7 @@ CS:GO's built-in download is too slow for big maps, so the pack runs a small Pow
 
 ## Community maps: `download_community_maps.bat`
 
-This downloads the KZ, Bhop, Surf and arena maps listed in each mode's `downloads.txt` from varq.net. It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
+This downloads the KZ, Bhop, Surf, arena and Aim Botz maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
 
 ---
 
@@ -166,7 +166,7 @@ Also included: SourceTV demo recording per match and round backups.
 - The map's own buttons add bots and set them up. The mode adds infinite ammo, buy anywhere, $60k, instant respawn and no round end.
 - It sets `sv_allow_point_servercommand always` so the map's buttons can run bot commands on a dedicated server. That setting is reverted when you switch mode.
 - Settings: `cfg/csgo_match/aimbotz.cfg`.
-- Map: `download_community_maps.bat` tries varq.net. Otherwise copy `csgo/maps/workshop/243702660/training_aim_csgo2.bsp` from a CS:GO Legacy client subscribed to the Workshop map.
+- Map: `download_community_maps.bat` downloads it straight from the Steam Workshop (id 243702660) through Steam's public file API. If that fails, copy `csgo/maps/workshop/243702660/training_aim_csgo2.bsp` from a CS:GO Legacy client subscribed to the Workshop map.
 
 ### KZ / Bhop / Surf
 `!r` `!cp` `!tp` `!pcp` `!ncp` `!speed` `!hide` `!noclip`. Instant respawn, no collisions or player damage. These modes have no run timers.

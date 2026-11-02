@@ -78,8 +78,21 @@ function Get-Kind([string]$file) {
     if ($s.StartsWith('BZh'))  { return 'bz2' }
     if ($s.StartsWith('VBSP')) { return 'bsp' }
     if ($b[0] -eq 0x37 -and $b[1] -eq 0x7A -and $b[2] -eq 0xBC -and $b[3] -eq 0xAF) { return '7z' }
+    if ($b[0] -eq 0x34 -and $b[1] -eq 0x12 -and $b[2] -eq 0xAA -and $b[3] -eq 0x55) { return 'vpk' }
     if ($s.StartsWith('<'))    { return 'html' }
     return 'unknown'
+}
+
+# Steam Workshop: Steam's public file API gives a direct download link for
+# Workshop items (no login needed).
+function Get-WorkshopFile([string]$id) {
+    try {
+        $r = Invoke-RestMethod -Method Post -Uri 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/' `
+             -Body @{ 'itemcount' = '1'; 'publishedfileids[0]' = $id } -TimeoutSec 30 -ErrorAction Stop
+        $d = @($r.response.publishedfiledetails)[0]
+        if ($null -eq $d -or $d.result -ne 1 -or [string]::IsNullOrEmpty($d.file_url)) { return $null }
+        return @{ Url = $d.file_url; Name = $d.filename; Title = $d.title }
+    } catch { return $null }
 }
 
 function Expand-Download([string]$file, [string]$kind, [string]$dest) {
@@ -112,7 +125,7 @@ $defaults = @{
     'bhop'  = @(@('bhop_xof', 'bhop_xof'), @('bhop_skyruins', 'bhop_skyruins'), @('bhop_zygos', 'bhop_zygos'))
     'surf'  = @(@('surf_utopia_v3', 'surf_utopia_v3'), @('surf_mesa_revo_go', 'surf_mesa_revo_go'), @('surf_mai_redone_csgo', 'surf_mai_redone_csgo'))
     'arena' = @(@('am_inferno_banana_dolnma', 'am_inferno_banana-1v1-arena'), @('am_walterv2', 'am_walterv2'))
-    'aimbotz' = @(,@('training_aim_csgo2', 'training-aim-csgo2'))
+    'aimbotz' = @(,@('training_aim_csgo2', 'workshop:243702660'))
 }
 # The first pack's default lists - replaced automatically (edited lists are left alone).
 $oldDefaults = @{
@@ -139,6 +152,16 @@ function Update-Lists([string]$mode, [string]$folder) {
                    '// Edit freely. Lines starting with // are ignored.') + ($maps | ForEach-Object { $_[0] })
         Set-Content -Path $ml -Value $lines
         Write-Host "  [list]   $mode\maplist.txt updated" -ForegroundColor DarkGray
+    }
+
+    # downloads.txt: upgrade entries from older packs
+    if (Test-Path $dl) {
+        $old = Get-Content $dl
+        $new = $old | ForEach-Object { if ($_ -match '^\s*training_aim_csgo2\s+training-aim-csgo2\s*$') { 'training_aim_csgo2  workshop:243702660' } else { $_ } }
+        if (($old -join "`n") -ne ($new -join "`n")) {
+            Set-Content -Path $dl -Value $new
+            Write-Host "  [list]   $mode\downloads.txt updated" -ForegroundColor DarkGray
+        }
     }
 
     # downloads.txt: create it if missing
@@ -181,8 +204,22 @@ foreach ($mode in $modes) {
 
         # Find the map's page and its download link.
         $pageUrl = $null; $dlUrl = $null
+        if ($page -match '^workshop:(\d+)$') {
+            # Steam Workshop item
+            $wid = $matches[1]
+            $pageUrl = "https://steamcommunity.com/sharedfiles/filedetails/?id=$wid"
+            $w = Get-WorkshopFile $wid
+            if (-not $w) {
+                Write-Host 'no download from the Workshop' -ForegroundColor Yellow
+                [void]$failed.Add("$mode\$map  (Steam gave no download for Workshop item $wid - subscribe to it in CS:GO Legacy, start the game once, then copy csgo\maps\workshop\$wid\$map.bsp into maps\modes\$mode\)")
+                continue
+            }
+            $dlUrl = $w.Url
+        }
         $slugs = @($page, $map, ($map -replace '_', '-')) | Select-Object -Unique
+        if ($dlUrl) { $slugs = @() }
         foreach ($game in @('counter-strike-go', 'counter-strike-2')) {
+            if ($dlUrl) { break }
             foreach ($slug in $slugs) {
                 $u = "https://varq.net/en/maps/$game/$slug"
                 $html = Get-Page $u
@@ -211,6 +248,11 @@ foreach ($mode in $modes) {
         }
 
         $kind = Get-Kind $archive
+        if ($kind -eq 'vpk') {
+            Write-Host 'only a CS2 version' -ForegroundColor Yellow
+            [void]$failed.Add("$mode\$map  (the download is a CS2 map (.vpk), which CS:GO can't load - get the CS:GO .bsp, e.g. from your own csgo\maps\workshop folder)")
+            continue
+        }
         if ($kind -eq 'html') {
             Write-Host 'site blocked the download' -ForegroundColor Yellow
             [void]$failed.Add("$mode\$map  (site asked for a browser - get it from $pageUrl)")

@@ -211,7 +211,8 @@ this pack. To get them:
     The standard community maps above were picked because varq.net hosts
     a download for them. To add more, put a line in the mode's
     downloads.txt: the map name, then (if different) the last part of its
-    varq.net page address. Only pages with a download file work.
+    varq.net page address - or workshop:<id> to download it straight from
+    the Steam Workshop. Only pages with a download file work.
     Most downloads are .rar files: install 7-Zip (7-zip.org) first for the
     most reliable unpacking - without it the script uses Windows' built-in
     tar, which handles .rar on Windows 11 but may not on Windows 10.
@@ -399,8 +400,8 @@ Aim Botz - solo aim training
   ammo, buy anywhere, $60k, instant respawn and no round end, and lets the
   map's buttons run bot commands (sv_allow_point_servercommand always).
   Settings: cfg\csgo_match\aimbotz.cfg. Leave with !gamemode.
-  Getting the map: download_community_maps.bat tries varq.net. If it can't
-  find it, subscribe to "Aim Botz - Training" (Workshop id 243702660) on a
+  Getting the map: download_community_maps.bat downloads it straight from
+  the Steam Workshop (Workshop id 243702660). If that fails, subscribe to "Aim Botz - Training" (Workshop id 243702660) on a
   PC with CS:GO Legacy, start the game once, then copy
   csgo\maps\workshop\243702660\training_aim_csgo2.bsp into the server's
   csgo\maps\modes\aimbotz folder.

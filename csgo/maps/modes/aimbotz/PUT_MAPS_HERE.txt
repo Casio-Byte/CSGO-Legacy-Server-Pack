@@ -7,7 +7,7 @@ Put the Aim Botz map here:
 Then an admin picks "Aim Botz (solo training)" in !gamemode, or types !aimbotz.
 
 Getting the map (it is a Workshop map, not part of CS:GO):
-  1. download_community_maps.bat tries varq.net automatically.
+  1. download_community_maps.bat downloads it from the Steam Workshop automatically.
   2. If that fails: on a PC with CS:GO Legacy, subscribe to "Aim Botz - Training"
      on the Steam Workshop (id 243702660), start CS:GO once so it downloads, then copy
        ...\Counter-Strike Global Offensive\csgo\maps\workshop\243702660\training_aim_csgo2.bsp
