@@ -212,7 +212,7 @@ Also included: SourceTV demo recording per match and round backups.
 | Blue Gem | Karambit Case Hardened #387 | Hydra Case Hardened | AK Case Hardened #661, Five-SeveN CH #278 | 4x Blue Gem (Glitter) / 4x All-Stars Blue (Holo) |
 | Asiimov Orange | Huntsman Tiger Tooth | Hand Wraps CAUTION! | AK, M4A4 and AWP Asiimov, M4A1-S Chantico's Fire | 4x Phoenix Reborn (Foil) / 4x All-Stars Orange (Holo) |
 
-Each set covers the AK, M4A4, M4A1-S, AWP, USP-S, P2000, Glock and Deagle, so every slot choice is themed. Equipping a set keeps your StatTrak and name tags, and the menu shows every item before you equip.
+Each set skins **all 34 guns** (pistols, SMGs, rifles, snipers, shotguns and machine guns) in the set's colours. The table shows the headline skins. Equipping a set keeps your StatTrak and name tags, and the menu shows every item before you equip.
 
 - Skins, wear, pattern, StatTrak, name tag and **stickers** (with wear) on any weapon or knife.
 - **Doppler / Gamma Doppler phases** are named: Ruby, Sapphire, Black Pearl, Phase 1-4 and Emerald.

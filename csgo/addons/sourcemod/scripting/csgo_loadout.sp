@@ -216,7 +216,8 @@ int   g_MenuDef[MAXPLAYERS + 1];
 int   g_MenuSlot[MAXPLAYERS + 1];
 int   g_MenuCat[MAXPLAYERS + 1];
 int   g_MenuTeam[MAXPLAYERS + 1];
-float g_LastKnifeGive[MAXPLAYERS + 1];
+float g_LastKnifeGive[MAXPLAYERS + 1];   // start of the current retry window (engine time)
+int   g_KnifeTries[MAXPLAYERS + 1];
 bool  g_KnifeWarned = false;
 
 int g_EntOwner[2049];         // userid whose skin is on this weapon (0 = none)
@@ -454,6 +455,7 @@ void ResetPlayer(int client)
 	g_LastBuyAlias[client][0] = '\0';
 	g_Input[client] = Input_None;
 	g_LastKnifeGive[client] = 0.0;
+	g_KnifeTries[client] = 0;
 }
 
 /* ================================================================== */
@@ -1756,9 +1758,20 @@ void GiveChosenKnife(int client)
 	if (!GetWeaponByDef(g_Knife[client], w))
 		return;
 
-	// Guard against loops if the game refuses the knife (core.cfg guidelines on).
-	float now = GetGameTime();
-	if (now - g_LastKnifeGive[client] < 1.0)
+	RemoveKnives(client, g_Knife[client]);
+	if (FindKnife(client) != -1)
+		return; // chosen knife already in hand
+
+	// Guard against loops if the game keeps refusing the knife (core.cfg
+	// guidelines on): at most 4 tries in 5 seconds. Engine time, because game
+	// time restarts on every map.
+	float now = GetEngineTime();
+	if (now - g_LastKnifeGive[client] > 5.0)
+	{
+		g_LastKnifeGive[client] = now;
+		g_KnifeTries[client] = 0;
+	}
+	if (++g_KnifeTries[client] > 4)
 	{
 		if (!g_KnifeWarned)
 		{
@@ -1767,15 +1780,27 @@ void GiveChosenKnife(int client)
 		}
 		return;
 	}
-	g_LastKnifeGive[client] = now;
-
-	RemoveKnives(client, g_Knife[client]);
-	if (FindKnife(client) != -1)
-		return; // chosen knife already in hand
 
 	int knife = GivePlayerItem(client, w.cls);
 	if (knife != -1 && GetEntPropEnt(knife, Prop_Send, "m_hOwnerEntity") != client)
 		EquipPlayerWeapon(client, knife);
+
+	// A round restart right after a map change can strip the new knife again;
+	// check it stuck.
+	CreateTimer(0.6, Timer_CheckKnife, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_CheckKnife(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (!IsValidHuman(client) || !IsPlayerAlive(client) || !g_Loaded[client] || g_Knife[client] == 0)
+		return Plugin_Stop;
+	if (IsDuelRunning())
+		return Plugin_Stop;
+	int knife = FindKnife(client);
+	if (knife == -1 || GetEntProp(knife, Prop_Send, "m_iItemDefinitionIndex") != g_Knife[client])
+		GiveChosenKnife(client);
+	return Plugin_Stop;
 }
 
 int FindKnife(int client)
@@ -1838,6 +1863,7 @@ void RefreshWeapon(int client, int def)
 			RemovePlayerItem(client, wep);
 			AcceptEntityInput(wep, "KillHierarchy");
 			g_LastKnifeGive[client] = 0.0;
+			g_KnifeTries[client] = 0;
 			if (g_Knife[client] != 0)
 				GiveChosenKnife(client);
 			else
@@ -1904,6 +1930,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 		SetEntPropString(client, Prop_Send, "m_szArmsModel", "");
 
 	CreateTimer(0.1, Timer_ApplyPlayer, userid, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(1.0, Timer_CheckKnife, userid, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_ApplyPlayer(Handle timer, int userid)

@@ -457,8 +457,9 @@ Aim duel (anyone, from warmup)
 Loadout
   !ws  (!loadout, !skins)   main menu
   !presets  (!sets)         preset loadouts - equip a full high-tier set in
-                            one click: knife, gloves and skins with
-                            colour-matched sticker crafts. 9 sets: Ruby
+                            one click: knife, gloves and a matching skin for
+                            every gun (all 34), with colour-matched sticker
+                            crafts. 9 sets: Ruby
                             Inferno, Sapphire Frost, Emerald Toxin, Golden
                             Lore, Candy Fade, Printstream, Neon Dream, Blue
                             Gem, Asiimov Orange. Also first in the !ws menu.
