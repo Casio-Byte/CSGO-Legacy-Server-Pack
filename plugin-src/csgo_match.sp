@@ -239,7 +239,9 @@ char g_RegisteredCmds[][] =
 	"gamemode", "mode", "modes", "options", "settings",
 	"respawn", "cp", "checkpoint", "tp", "teleport", "pcp", "prevcp", "ncp", "nextcp",
 	"speed", "hide", "noclip", "nc",
-	"guns", "sitout", "rank", "maps", "changemap"
+	"guns", "sitout", "rank", "maps", "changemap",
+	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries",
+	"aimbotz", "aim", "training"
 };
 
 /* ------------------------------------------------------------------ */
