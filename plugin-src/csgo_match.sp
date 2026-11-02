@@ -373,7 +373,7 @@ char g_CfgDuel[][] =
 	"mp_randomspawn 0",
 	"mp_respawn_immunitytime 0",
 	"mp_halftime 0",
-	"mp_maxrounds 0",
+	"mp_maxrounds 999",   // 0 would end the game after one round
 	"mp_timelimit 0",
 	"mp_warmup_pausetimer 0"
 };
@@ -389,7 +389,7 @@ char g_CfgAimBotz[][] =
 	"mp_roundtime_defuse 60",
 	"mp_roundtime_hostage 60",
 	"mp_freezetime 0",
-	"mp_maxrounds 0",
+	"mp_maxrounds 999",   // 0 would end the game after one round
 	"mp_timelimit 0",
 	"mp_respawn_on_death_ct 1",
 	"mp_respawn_on_death_t 1",
@@ -576,7 +576,7 @@ char g_CfgArena[][] =
 	"mp_limitteams 0",
 	"mp_friendlyfire 0",
 	"mp_halftime 0",
-	"mp_maxrounds 0",
+	"mp_maxrounds 999",   // 0 would end the game after one round
 	"mp_timelimit 0",
 	"mp_warmup_pausetimer 0"
 };
@@ -1561,6 +1561,7 @@ void EnterPractice()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/prac.cfg");
+	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 
 	Announce("\x04Practice mode\x01 on. !spawn <n>, !clear, !god — !exitprac to leave.");
@@ -1771,6 +1772,14 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 				GetCvarInt("game_mode"), GetClientCount(true));
 			CreateTimer(3.0, Timer_RecoverWarmup, _, TIMER_FLAG_NO_MAPCHANGE);
 		}
+		else if (g_State == State_Practice || g_State == State_Movement || g_State == State_Arena
+			|| g_State == State_Duel || g_AimBotzNext)
+		{
+			LogMessage("Unexpected game end in practice-type mode (state %d): mp_timelimit=%d mp_maxrounds=%d mp_winlimit=%d game_type=%d game_mode=%d",
+				g_State, GetCvarInt("mp_timelimit"), GetCvarInt("mp_maxrounds"), GetCvarInt("mp_winlimit"),
+				GetCvarInt("game_type"), GetCvarInt("game_mode"));
+			CreateTimer(3.0, Timer_RecoverPractice, _, TIMER_FLAG_NO_MAPCHANGE);
+		}
 		return;
 	}
 
@@ -1783,6 +1792,30 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 		return;
 	}
 	Announce("Match over — GG! Change map or type \x04!restart\x01 for a new match.");
+}
+
+// Practice-type modes never end the game by themselves. (mp_maxrounds 0 is NOT
+// "no limit" in CS:GO - the game ends after the first round - so older configs
+// written with 0 are overridden here.)
+void NoGameEnd()
+{
+	ServerCommand("mp_maxrounds 999");
+	ServerCommand("mp_timelimit 0");
+	ServerCommand("mp_winlimit 0");
+	ServerCommand("mp_match_can_clinch 0");
+	ServerCommand("mp_endmatch_votenextmap 0");
+	ServerCommand("mp_match_end_changelevel 0");
+	ServerCommand("mp_match_end_restart 0");
+}
+
+public Action Timer_RecoverPractice(Handle timer)
+{
+	if (g_State == State_Live)
+		return Plugin_Stop;
+	Announce("The game tried to end — restarting it.");
+	NoGameEnd();
+	ServerCommand("mp_restartgame 1");
+	return Plugin_Stop;
 }
 
 public Action Timer_RecoverWarmup(Handle timer)
@@ -2094,6 +2127,7 @@ void StartDuel(int a, int b, int weapon, int target)
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/duel.cfg");
+	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 
 	// Everyone else watches.
@@ -2860,8 +2894,14 @@ void ShowModeMapMenu(int client)
 
 	char currentName[PLATFORM_MAX_PATH];
 	GetMapDisplayName(current, currentName, sizeof(currentName));
-	Format(line, sizeof(line), "Stay on %s", currentName);
-	menu.AddItem(current, line);
+	bool mapSpecific = (gm == GM_KZ || gm == GM_Bhop || gm == GM_Surf || gm == GM_Arena || gm == GM_AimBotz);
+	char folderPrefix[PLATFORM_MAX_PATH];
+	Format(folderPrefix, sizeof(folderPrefix), "modes/%s/", g_GmFolder[gm]);
+	if (!mapSpecific || HasMovePrefix(currentName, gm) || StrContains(current, folderPrefix, false) == 0)
+	{
+		Format(line, sizeof(line), "Stay on %s", currentName);
+		menu.AddItem(current, line);
+	}
 
 	StringMap seen = new StringMap();
 	seen.SetValue(currentName, 1);
@@ -2891,7 +2931,11 @@ void ShowModeMapMenu(int client)
 		// Only maps made for the mode; normal maps make no sense here.
 		int found = folderMaps + AddPrefixedMaps(menu, gm, seen);
 		if (found == 0)
+		{
 			PrintToChat(client, "%sNo %s maps found. Put .bsp files in \x04csgo\\maps\\modes\\%s\x01 and open this menu again.", PREFIX, g_GmName[gm], g_GmFolder[gm]);
+			if (gm == GM_AimBotz)
+				PrintToChat(client, "%sRun \x04download_community_maps.bat\x01 on the server to get Aim Botz (training_aim_csgo2), then open this menu again.", PREFIX);
+		}
 	}
 	else
 	{
@@ -3505,6 +3549,7 @@ void EnterMovement(int move)
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/%s", cfg);
+	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 	CreateTimer(3.0, Timer_MoveAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
 }
@@ -3974,6 +4019,7 @@ void EnterArena()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/arena.cfg");
+	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 
 	if (g_ArenaCount == 0)
@@ -5939,6 +5985,7 @@ void EnterAimBotz()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/aimbotz.cfg");
+	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 
 	char map[PLATFORM_MAX_PATH];
