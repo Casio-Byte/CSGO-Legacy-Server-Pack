@@ -102,6 +102,18 @@ CS:GO's built-in download is too slow for big maps, so the pack runs a small Pow
 - Path traversal is blocked.
 - The first run asks for admin once, to add the URL reservation and firewall rule.
 
+## Uninstall: `uninstall_server_pack.bat`
+
+This puts the server back to plain CS:GO. It removes:
+- Metamod and SourceMod, including all plugins, extensions, player loadouts and logs
+- the pack's cfgs
+- `GameModes_Server.txt`
+- the spray images
+- the launcher scripts and their settings
+- optionally, the firewall rules and port permission
+
+Close the server before running it. It lists everything and asks first. By default it **moves** the files to `csgo/_server_pack_backup_<date>` so you can undo it; choosing delete removes them for good. Community maps are kept unless you choose otherwise. The game, `steam.inf`, the map cycle files and the official maps are never touched.
+
 ## Community maps: `download_community_maps.bat`
 
 This downloads the KZ, Bhop, Surf, arena and Aim Botz maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.

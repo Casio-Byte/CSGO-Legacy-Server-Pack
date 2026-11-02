@@ -30,6 +30,7 @@ INSTALL (drag and drop)
        csgo\start_server.bat            the launcher - use this to start
        csgo\start_fastdl.bat            fast map downloads for players
        csgo\download_community_maps.bat KZ/Bhop/Surf/arena map downloader
+       csgo\uninstall_server_pack.bat   removes the whole pack again
 
    Updating a server you already set up? This pack replaces cfg\server.cfg
    with clean defaults and resets cfg\csgo_match\server_settings.cfg, so
@@ -155,6 +156,23 @@ because they clash with this pack's own plugins:
 Not included: the repo's maps and graffiti package is a Google Drive
 download, not part of the repo - get it from the link in the repo's README
 if you want those maps. Its start.bat is replaced by start_server.bat.
+
+UNINSTALL / BACK TO PLAIN CS:GO
+-------------------------------
+  csgo\uninstall_server_pack.bat removes everything this pack added:
+  Metamod, SourceMod (plugins, extensions, player loadouts, logs), the
+  pack's cfgs (cfg\csgo_match, cfg\sourcemod, server.cfg, ESL cfgs),
+  GameModes_Server.txt, the spray images, the launcher/FastDL/downloader
+  scripts and launcher_settings.cmd. It also offers to remove the Windows
+  Firewall rules and port permission FastDL and the setup added.
+  - Close the server first.
+  - It lists everything and asks before doing anything.
+  - Community maps (maps\modes) are kept unless you say otherwise.
+  - Default: everything is MOVED to csgo\_server_pack_backup_<date>, so
+    you can undo it by moving it back. Choose "delete" (and type DELETE)
+    to remove it for good.
+  - Never touched: the game, steam.inf, mapcycle.txt, maplist.txt and the
+    official maps.
 
 MAP FOLDERS
 -----------
