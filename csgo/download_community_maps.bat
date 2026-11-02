@@ -42,7 +42,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 
 $csgo  = $env:CSGO_DIR.TrimEnd('\')
 $temp  = Join-Path $csgo '_map_downloads'
-$modes = @('kz', 'bhop', 'surf', 'arena')
+$modes = @('kz', 'bhop', 'surf', 'arena', 'aimbotz')
 $ua    = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 $curl  = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
 $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -112,6 +112,7 @@ $defaults = @{
     'bhop'  = @(@('bhop_xof', 'bhop_xof'), @('bhop_skyruins', 'bhop_skyruins'), @('bhop_zygos', 'bhop_zygos'))
     'surf'  = @(@('surf_utopia_v3', 'surf_utopia_v3'), @('surf_mesa_revo_go', 'surf_mesa_revo_go'), @('surf_mai_redone_csgo', 'surf_mai_redone_csgo'))
     'arena' = @(@('am_inferno_banana_dolnma', 'am_inferno_banana-1v1-arena'), @('am_walterv2', 'am_walterv2'))
+    'aimbotz' = @(,@('training_aim_csgo2', 'training-aim-csgo2'))
 }
 # The first pack's default lists - replaced automatically (edited lists are left alone).
 $oldDefaults = @{
@@ -171,7 +172,8 @@ foreach ($mode in $modes) {
         $page  = if ($parts.Count -gt 1) { $parts[1] } else { $map }
 
         $target = Join-Path $folder "$map.bsp"
-        if ((Test-Path $target) -or (Test-Path (Join-Path $csgo "maps\$map.bsp"))) {
+        $inWorkshop = @(Get-ChildItem -Path (Join-Path $csgo 'maps\workshop') -Filter "$map.bsp" -Recurse -ErrorAction SilentlyContinue).Count -gt 0
+        if ((Test-Path $target) -or (Test-Path (Join-Path $csgo "maps\$map.bsp")) -or $inWorkshop) {
             Write-Host "  [have]   $mode\$map" -ForegroundColor DarkGray
             continue
         }

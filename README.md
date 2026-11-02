@@ -124,6 +124,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | KZ / Bhop / Surf | movement physics per mode, checkpoints, speedometer |
 | 1v1 match | ready-up 1v1, one player per side |
 | Multi-1v1 arenas | arena ladder on `am_` / `1v1_` maps |
+| Aim Botz (solo training) | `training_aim_csgo2`: the map's buttons control the bots. Infinite ammo, buy anywhere, no round end. `!aimbotz` jumps straight to it. |
 
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
@@ -159,6 +160,13 @@ Also included: SourceTV demo recording per match and round backups.
 - `!stop` on/off
 - demo recording
 - side-pick time
+
+### Aim Botz: solo aim training
+- `!aimbotz` (`!aim`, `!training`) or `!gamemode` → **Aim Botz (solo training)**. It opens the map picker for `maps/modes/aimbotz/`.
+- The map's own buttons add bots and set them up. The mode adds infinite ammo, buy anywhere, $60k, instant respawn and no round end.
+- It sets `sv_allow_point_servercommand always` so the map's buttons can run bot commands on a dedicated server. That setting is reverted when you switch mode.
+- Settings: `cfg/csgo_match/aimbotz.cfg`.
+- Map: `download_community_maps.bat` tries varq.net. Otherwise copy `csgo/maps/workshop/243702660/training_aim_csgo2.bsp` from a CS:GO Legacy client subscribed to the Workshop map.
 
 ### KZ / Bhop / Surf
 `!r` `!cp` `!tp` `!pcp` `!ncp` `!speed` `!hide` `!noclip`. Instant respawn, no collisions or player damage. These modes have no run timers.

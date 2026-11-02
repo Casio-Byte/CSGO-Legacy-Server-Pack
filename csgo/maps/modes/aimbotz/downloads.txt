@@ -1,0 +1,6 @@
+// Used by download_community_maps.bat - one map per line:
+//     <map name>  <varq.net page name>
+// The page name is the last part of the map's varq.net address.
+// Leave it out if it's the same as the map name.
+// Only maps whose varq.net page has a download file will work.
+training_aim_csgo2  training-aim-csgo2

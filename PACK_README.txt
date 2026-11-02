@@ -174,6 +174,7 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\surf\           Surf
   csgo\maps\modes\1v1\            1v1 match
   csgo\maps\modes\arena\          Multi-1v1 arenas
+  csgo\maps\modes\aimbotz\        Aim Botz (solo training)
 
 Each folder also has a maplist.txt of standard maps for that mode. Installed
 ones are listed near the top of the menu; missing ones are shown greyed out
@@ -194,6 +195,7 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Surf         surf_utopia_v3 surf_mesa_revo_go surf_mai_redone_csgo
                                                              (community)
   Arenas       am_inferno_banana_dolnma am_walterv2          (community)
+  Aim Botz     training_aim_csgo2                            (community)
 
 The official maps are already installed with the server. The community
 maps (KZ, Bhop, Surf, arenas) don't come with CS:GO and aren't included in
@@ -279,6 +281,7 @@ Game modes (admins)
                           Surf              surf_ maps
                           1v1 match         ready-up 1v1, one player per side
                           Multi-1v1 arenas  arena ladder on am_ / 1v1_ maps
+                          Aim Botz          solo aim training (below)
                           1v1 aim duel      challenge a player
                           Match options     opens !options
                         The map menu also has "All maps on the server...".
@@ -387,6 +390,20 @@ Best of 3 (Competitive 5v5)
   !series               maps, who picked them, and the score (anyone)
   !endseries            admins: stop the series
   Changing map or game mode yourself mid-series also ends it.
+
+Aim Botz - solo aim training
+  !aimbotz  (!aim, !training)  admins: switch to Aim Botz (map picker), or
+                        pick "Aim Botz (solo training)" in !gamemode.
+  Uses the Aim Botz - Training map (training_aim_csgo2). The map's own
+  buttons add the bots and change their settings. The mode adds infinite
+  ammo, buy anywhere, $60k, instant respawn and no round end, and lets the
+  map's buttons run bot commands (sv_allow_point_servercommand always).
+  Settings: cfg\csgo_match\aimbotz.cfg. Leave with !gamemode.
+  Getting the map: download_community_maps.bat tries varq.net. If it can't
+  find it, subscribe to "Aim Botz - Training" (Workshop id 243702660) on a
+  PC with CS:GO Legacy, start the game once, then copy
+  csgo\maps\workshop\243702660\training_aim_csgo2.bsp into the server's
+  csgo\maps\modes\aimbotz folder.
 
 Match - practice mode
   !spawn <n>  !clear  !god

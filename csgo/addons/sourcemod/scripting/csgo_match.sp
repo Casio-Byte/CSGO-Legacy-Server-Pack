@@ -166,6 +166,7 @@ bool  g_HidePlayers[MAXPLAYERS + 1];
 /* 1v1 match / Multi-1v1 arenas */
 bool  g_OneVOneNext = false;     // 1v1 ready-up match (survives map changes)
 bool  g_ArenaNext = false;       // Multi-1v1 arenas (survives map changes)
+bool  g_AimBotzNext = false;     // Aim Botz solo training (survives map changes)
 
 /* !map */
 #define MAPCAT_ALL      -3
@@ -374,6 +375,36 @@ char g_CfgDuel[][] =
 	"mp_halftime 0",
 	"mp_maxrounds 0",
 	"mp_timelimit 0",
+	"mp_warmup_pausetimer 0"
+};
+
+char g_CfgAimBotz[][] =
+{
+	"// Aim Botz - Training (training_aim_csgo2): solo aim practice.",
+	"// The map's own buttons add and set up the bots.",
+	"sv_allow_point_servercommand always   // lets the map's buttons run bot commands on a dedicated server",
+	"sv_cheats 0",
+	"mp_ignore_round_win_conditions 1",
+	"mp_roundtime 60",
+	"mp_roundtime_defuse 60",
+	"mp_roundtime_hostage 60",
+	"mp_freezetime 0",
+	"mp_maxrounds 0",
+	"mp_timelimit 0",
+	"mp_respawn_on_death_ct 1",
+	"mp_respawn_on_death_t 1",
+	"mp_respawn_immunitytime 0",
+	"mp_buy_anywhere 1",
+	"mp_buytime 99999",
+	"mp_startmoney 60000",
+	"mp_maxmoney 60000",
+	"mp_free_armor 1",
+	"sv_infinite_ammo 2",
+	"mp_death_drop_gun 0",
+	"mp_friendlyfire 0",
+	"mp_autoteambalance 0",
+	"mp_limitteams 0",
+	"mp_autokick 0",
 	"mp_warmup_pausetimer 0"
 };
 
@@ -833,6 +864,7 @@ void Dispatch(int client, const char[] cmd, const char[] arg)
 	// game modes / options
 	else if (Is(cmd, "gamemode") || Is(cmd, "mode") || Is(cmd, "modes"))  Cmd_GameMode(client);
 	else if (Is(cmd, "options") || Is(cmd, "settings"))                  Cmd_Options(client);
+	else if (Is(cmd, "aimbotz") || Is(cmd, "aim") || Is(cmd, "training"))  Cmd_AimBotz(client);
 	// best of 3
 	else if (Is(cmd, "series") || Is(cmd, "maps3"))                      Cmd_Series(client);
 	else if (Is(cmd, "bo3") || Is(cmd, "veto"))                          Cmd_Bo3(client);
@@ -1317,6 +1349,7 @@ void Cmd_Help(int client)
 		Reply(client, "\x04Modes:\x01 !gamemode (all game modes)  !options (match settings)");
 	else
 		Reply(client, "\x04Modes:\x01 !gamemode shows the current mode");
+	Reply(client, "\x04Solo practice:\x01 !aimbotz (Aim Botz training map, admins) !prac (practice mode)");
 	if (IsAdmin(client))
 		Reply(client, "\x04Best of 3:\x01 !bo3 (turn on) !bo1 (single map) !series (maps + score) !endseries");
 	else
@@ -2582,12 +2615,13 @@ enum
 	GM_Surf,
 	GM_1v1Match,
 	GM_Arena,
+	GM_AimBotz,
 	GM_COUNT
 };
 
-char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "KZ (climb)", "Bhop", "Surf", "1v1 match", "Multi-1v1 arenas" };
-int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0 };
-int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 0, 0, 0, 1, 0 };
+char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "KZ (climb)", "Bhop", "Surf", "1v1 match", "Multi-1v1 arenas", "Aim Botz (solo training)" };
+int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 };
+int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
 // Each mode has its own map folder: csgo/maps/modes/<folder>/
 // Standard maps written to maps/modes/<folder>/maplist.txt if that file is missing.
 char g_GmDefaultMaps[GM_COUNT][] =
@@ -2603,9 +2637,10 @@ char g_GmDefaultMaps[GM_COUNT][] =
 	"bhop_xof bhop_skyruins bhop_zygos",
 	"surf_utopia_v3 surf_mesa_revo_go surf_mai_redone_csgo",
 	"de_shortdust de_lake de_shortnuke gd_rialto",
-	"am_inferno_banana_dolnma am_walterv2"
+	"am_inferno_banana_dolnma am_walterv2",
+	"training_aim_csgo2"
 };
-char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "kz", "bhop", "surf", "1v1", "arena" };
+char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "kz", "bhop", "surf", "1v1", "arena", "aimbotz" };
 
 char g_MapPool[][] =
 {
@@ -2632,6 +2667,8 @@ int CurrentMode()
 		return GM_Practice;
 	if (g_MoveModeNext != MOVE_NONE)
 		return GM_KZ + g_MoveModeNext - MOVE_KZ;
+	if (g_AimBotzNext)
+		return GM_AimBotz;
 	if (g_ArenaNext)
 		return GM_Arena;
 	if (g_OneVOneNext)
@@ -2663,7 +2700,7 @@ bool IsWingman()
 // Modes where the ready-up / knife / live match flow runs.
 bool IsMatchMode()
 {
-	if (g_MoveModeNext != MOVE_NONE || g_ArenaNext)
+	if (g_MoveModeNext != MOVE_NONE || g_ArenaNext || g_AimBotzNext)
 		return false;
 	if (GetCvarInt("game_type") != 0)
 		return false;
@@ -2688,6 +2725,11 @@ void ApplyModeOnMapStart()
 	if (g_ArenaNext)
 	{
 		EnterArena();
+		return;
+	}
+	if (g_AimBotzNext)
+	{
+		EnterAimBotz();
 		return;
 	}
 	if (IsMatchMode())
@@ -2844,7 +2886,7 @@ void ShowModeMapMenu(int client)
 			AddMapItem(menu, g_DemolitionMaps[i], seen);
 	}
 
-	if (gm == GM_KZ || gm == GM_Bhop || gm == GM_Surf || gm == GM_Arena)
+	if (gm == GM_KZ || gm == GM_Bhop || gm == GM_Surf || gm == GM_Arena || gm == GM_AimBotz)
 	{
 		// Only maps made for the mode; normal maps make no sense here.
 		int found = folderMaps + AddPrefixedMaps(menu, gm, seen);
@@ -2911,11 +2953,15 @@ public Action Timer_SwitchMode(Handle timer)
 
 	g_PracticeNext = (gm == GM_Practice);
 	int newMove = (gm >= GM_KZ && gm <= GM_Surf) ? (MOVE_KZ + gm - GM_KZ) : MOVE_NONE;
-	if ((g_MoveModeNext != MOVE_NONE && newMove == MOVE_NONE) || (g_ArenaNext && gm != GM_Arena))
+	if ((g_MoveModeNext != MOVE_NONE && newMove == MOVE_NONE) || (g_ArenaNext && gm != GM_Arena)
+		|| (g_AimBotzNext && gm != GM_AimBotz))
 		ResetMovementCvars();
+	if (g_AimBotzNext && gm != GM_AimBotz)
+		ResetAimBotzCvars();
 	g_MoveModeNext = newMove;
 	g_OneVOneNext = (gm == GM_1v1Match);
 	g_ArenaNext = (gm == GM_Arena);
+	g_AimBotzNext = (gm == GM_AimBotz);
 	if (g_cvDuelActive != null)
 		g_cvDuelActive.BoolValue = false;
 	ServerCommand("game_type %d", g_GmType[gm]);
@@ -3164,34 +3210,39 @@ void LoadSavedOptions()
 /*  KZ / Bhop / Surf                                                  */
 /* ------------------------------------------------------------------ */
 
-void GetMovePrefixes(int gm, char prefixes[4][8], int &count)
+void GetMovePrefixes(int gm, char prefixes[4][16], int &count)
 {
 	count = 0;
 	if (gm == GM_KZ)
 	{
-		strcopy(prefixes[count++], 8, "kz_");
-		strcopy(prefixes[count++], 8, "kzpro_");
-		strcopy(prefixes[count++], 8, "bkz_");
-		strcopy(prefixes[count++], 8, "xc_");
+		strcopy(prefixes[count++], 16, "kz_");
+		strcopy(prefixes[count++], 16, "kzpro_");
+		strcopy(prefixes[count++], 16, "bkz_");
+		strcopy(prefixes[count++], 16, "xc_");
 	}
 	else if (gm == GM_Bhop)
 	{
-		strcopy(prefixes[count++], 8, "bhop_");
+		strcopy(prefixes[count++], 16, "bhop_");
 	}
 	else if (gm == GM_Surf)
 	{
-		strcopy(prefixes[count++], 8, "surf_");
+		strcopy(prefixes[count++], 16, "surf_");
 	}
 	else if (gm == GM_Arena)
 	{
-		strcopy(prefixes[count++], 8, "am_");
-		strcopy(prefixes[count++], 8, "1v1_");
+		strcopy(prefixes[count++], 16, "am_");
+		strcopy(prefixes[count++], 16, "1v1_");
+	}
+	else if (gm == GM_AimBotz)
+	{
+		strcopy(prefixes[count++], 16, "training_aim");
+		strcopy(prefixes[count++], 16, "aim_botz");
 	}
 }
 
 bool HasMovePrefix(const char[] name, int gm)
 {
-	char prefixes[4][8];
+	char prefixes[4][16];
 	int count;
 	GetMovePrefixes(gm, prefixes, count);
 	for (int i = 0; i < count; i++)
@@ -5080,6 +5131,7 @@ void WriteDefaultConfigs()
 	WriteDefaultCfg("arena.cfg", g_CfgArena, sizeof(g_CfgArena));
 	WriteDefaultCfg("bhop.cfg", g_CfgBhop, sizeof(g_CfgBhop));
 	WriteDefaultCfg("surf.cfg", g_CfgSurf, sizeof(g_CfgSurf));
+	WriteDefaultCfg("aimbotz.cfg", g_CfgAimBotz, sizeof(g_CfgAimBotz));
 }
 
 void WriteDefaultCfg(const char[] name, const char[][] lines, int count)
@@ -5647,7 +5699,7 @@ void SeriesOnMapStart()
 	char current[PLATFORM_MAX_PATH];
 	GetCurrentMap(current, sizeof(current));
 	if (!SameMap(current, g_SeriesMaps[g_SeriesMapIndex]) || g_PracticeNext || g_MoveModeNext != MOVE_NONE
-		|| g_ArenaNext || g_OneVOneNext)
+		|| g_ArenaNext || g_OneVOneNext || g_AimBotzNext)
 	{
 		LogMessage("Best-of-3 series cancelled: %s was loaded instead of %s.", current, g_SeriesMaps[g_SeriesMapIndex]);
 		CancelSeries("");
@@ -5870,4 +5922,63 @@ void Cmd_EndSeries(int client)
 	CancelSeries(msg);
 	if (wasVeto && g_State == State_Warmup)
 		Announce("Back to warmup. \x04!ready\x01 starts a new map vote — or an admin can type \x04!bo1\x01 for a single map.");
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Aim Botz - Training (solo aim practice)                           */
+/* ------------------------------------------------------------------ */
+
+void EnterAimBotz()
+{
+	DuelCleanup();
+	ResetMatch();
+	StopDemo();
+	g_State = State_None;
+
+	ServerCommand("mp_unpause_match");
+	ServerCommand("mp_warmup_end");
+	ServerCommand("exec csgo_match/aimbotz.cfg");
+	ServerCommand("mp_restartgame 1");
+
+	char map[PLATFORM_MAX_PATH];
+	GetCurrentMap(map, sizeof(map));
+	if (StrContains(map, "training_aim", false) == -1 && StrContains(map, "aim_botz", false) == -1)
+		LogMessage("Aim Botz mode is on, but %s isn't the Aim Botz map (training_aim_csgo2).", map);
+	CreateTimer(4.0, Timer_AimBotzAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_AimBotzAnnounce(Handle timer)
+{
+	if (g_AimBotzNext)
+	{
+		Announce("\x04Aim Botz - Training\x01: use the map's buttons to add bots and change their settings. Infinite ammo, buy anywhere, no round end.");
+		Announce("\x04!gamemode\x01 (admins) to leave.");
+	}
+	return Plugin_Stop;
+}
+
+void ResetAimBotzCvars()
+{
+	ServerCommand("sv_allow_point_servercommand official");
+	ServerCommand("sv_infinite_ammo 0");
+	ServerCommand("mp_free_armor 0");
+	ServerCommand("mp_death_drop_gun 1");
+	ServerCommand("bot_kick");
+}
+
+// !aimbotz: admins jump straight to the Aim Botz map picker.
+void Cmd_AimBotz(int client)
+{
+	if (!CheckInGame(client))
+		return;
+	if (g_AimBotzNext)
+	{
+		Reply(client, "Aim Botz is already on. Admins can leave with \x04!gamemode\x01.");
+		return;
+	}
+	if (!RequireAdmin(client))
+		return;
+	g_PickMode[client] = GM_AimBotz;
+	ShowModeMapMenu(client);
 }
