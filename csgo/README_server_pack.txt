@@ -438,6 +438,14 @@ Aim duel (anyone, from warmup)
 
 Loadout
   !ws  (!loadout, !skins)   main menu
+  !presets  (!sets)         preset loadouts - equip a full high-tier set in
+                            one click: knife, gloves and skins with
+                            colour-matched sticker crafts. 9 sets: Ruby
+                            Inferno, Sapphire Frost, Emerald Toxin, Golden
+                            Lore, Candy Fade, Printstream, Neon Dream, Blue
+                            Gem, Asiimov Orange. Also first in the !ws menu.
+                            Edit or add sets in
+                            addons\sourcemod\configs\csgo_loadout_presets.cfg
   !slots  (!defaults)       default weapons: USP-S/P2000, M4A1-S/M4A4,
                             CZ75 vs Five-SeveN/Tec-9, R8/Deagle, MP5-SD/MP7
                             (new players are asked on first spawn)

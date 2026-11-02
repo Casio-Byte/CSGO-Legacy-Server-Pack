@@ -184,10 +184,27 @@ Also included: SourceTV demo recording per match and round backups.
 | Command | |
 |---|---|
 | `!ws` `!loadout` `!skins` | main menu |
+| `!presets` `!sets` | **preset loadouts**: equip a full high-tier set in one click. Each has a knife, gloves and skins with colour-matched sticker crafts (see below). |
 | `!knife` `!gloves` `!agents` `!patches` (3 slots) `!stickers` | |
 | `!slots` | default weapons: USP-S/P2000, M4A1-S/M4A4, CZ75 vs Five-SeveN/Tec-9, R8/Deagle, MP5-SD/MP7. New players are asked on first spawn. |
 | `!3rd` | third person to view your agent (blocked in live matches) |
 | `!gen <weapon> <skin> [pattern] [wear] [sticker wear...]` | gen-code |
+
+**Preset sets** (`addons/sourcemod/configs/csgo_loadout_presets.cfg`, editable). The first sticker craft goes on rifles and the AWP, the second on pistols:
+
+| Set | Knife | Gloves | Highlights | Sticker crafts |
+|---|---|---|---|---|
+| Ruby Inferno | Karambit Doppler (Ruby) | Driver Crimson Weave | AK Bloodsport, M4A4 Howl, AWP Wildfire | 4x Howling Dawn / 4x Seeing Red (Foil) |
+| Sapphire Frost | Butterfly Doppler (Sapphire) | Sport Superconductor | AK Vulcan, M4A1-S Icarus Fell, USP Orion | 4x Blue Snowflake (Foil) / 4x Snowfall (Glitter) |
+| Emerald Toxin | Bayonet Gamma Doppler (Emerald) | Hydra Emerald | AK Fire Serpent, AWP Containment Breach, Glock Emerald | 4x Toxic (Foil) / 4x Toxic Flow (Holo) |
+| Golden Lore | M9 Bayonet Lore | Sport Bronze Morph | AWP Dragon Lore, AK Gold Arabesque, Deagle Golden Koi | 4x Crown (Foil) / 4x Gold Web (Foil) |
+| Candy Fade | Skeleton Fade | Specialist Fade | AWP Fade, Glock Fade, AK Neon Revolution | 4x Cotton Candy Flow (Holo) / 4x Unicorn (Holo) |
+| Printstream | Talon Doppler (Black Pearl) | Driver Snow Leopard | M4A1-S, USP-S and Deagle Printstream, Neo-Noir | 4x Infinite Diamond (Holo) / 4x Snowfall (Glitter) |
+| Neon Dream | Stiletto Doppler (Phase 2) | Sport Vice | AWP Fever Dream, AK Neon Rider, M4A4 Cyber Security | 4x Ultraviolet Poison Frog (Foil) / 4x Doppler Poison Frog (Foil) |
+| Blue Gem | Karambit Case Hardened #387 | Hydra Case Hardened | AK Case Hardened #661, Five-SeveN CH #278 | 4x Blue Gem (Glitter) / 4x All-Stars Blue (Holo) |
+| Asiimov Orange | Huntsman Tiger Tooth | Hand Wraps CAUTION! | AK, M4A4 and AWP Asiimov, M4A1-S Chantico's Fire | 4x Phoenix Reborn (Foil) / 4x All-Stars Orange (Holo) |
+
+Each set covers the AK, M4A4, M4A1-S, AWP, USP-S, P2000, Glock and Deagle, so every slot choice is themed. Equipping a set keeps your StatTrak and name tags, and the menu shows every item before you equip.
 
 - Skins, wear, pattern, StatTrak, name tag and **stickers** (with wear) on any weapon or knife.
 - **Doppler / Gamma Doppler phases** are named: Ruby, Sapphire, Black Pearl, Phase 1-4 and Emerald.

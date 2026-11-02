@@ -191,6 +191,7 @@ bool g_ItemsLoaded = false;
 /* ------------------------------------------------------------------ */
 
 StringMap g_Skins[MAXPLAYERS + 1];        // "def" -> WeaponSkin
+KeyValues g_Presets = null;               // configs/csgo_loadout_presets.cfg
 int   g_Knife[MAXPLAYERS + 1];
 int   g_GloveDef[MAXPLAYERS + 1];
 int   g_GlovePaint[MAXPLAYERS + 1];
@@ -263,6 +264,8 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_loadout", Cmd_Main);
 	RegConsoleCmd("sm_skins", Cmd_Main);
 	RegConsoleCmd("sm_knife", Cmd_Knife);
+	RegConsoleCmd("sm_presets", Cmd_Presets);
+	RegConsoleCmd("sm_sets", Cmd_Presets);
 	RegConsoleCmd("sm_gloves", Cmd_Gloves);
 	RegConsoleCmd("sm_agents", Cmd_Agents);
 	RegConsoleCmd("sm_agent", Cmd_Agents);
@@ -308,6 +311,7 @@ public void OnPluginStart()
 
 public void OnMapStart()
 {
+	LoadPresets();
 	PrecacheAgents();
 }
 
@@ -2732,6 +2736,7 @@ void ShowMainMenu(int client)
 		Format(gloveName, sizeof(gloveName), "%s | %s", g.name, paint);
 	}
 
+	menu.AddItem("presets", "Preset loadouts (quick equip a full set)");
 	menu.AddItem("slots", "Default weapons (USP-S, M4A1-S, CZ75...)");
 	menu.AddItem("skins", "Weapon skins & stickers");
 	Format(line, sizeof(line), "Knife: %s", knifeName);
@@ -2754,7 +2759,9 @@ public int Handler_Main(Menu menu, MenuAction action, int client, int item)
 	{
 		char info[16];
 		menu.GetItem(item, info, sizeof(info));
-		if (StrEqual(info, "slots"))
+		if (StrEqual(info, "presets"))
+			ShowPresetMenu(client);
+		else if (StrEqual(info, "slots"))
 			ShowSlotsMenu(client);
 		else if (StrEqual(info, "skins"))
 			ShowCategoryMenu(client);
@@ -3839,4 +3846,253 @@ void SetPatch(int client, int slot, int id)
 		ApplyPatches(client);
 		ShowPreview(client, 4.0);
 	}
+}
+
+
+/* ---------- Preset loadouts ---------- */
+
+void LoadPresets()
+{
+	delete g_Presets;
+	char path[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, path, sizeof(path), "configs/csgo_loadout_presets.cfg");
+	if (!FileExists(path))
+		return;
+	g_Presets = new KeyValues("Presets");
+	if (!g_Presets.ImportFromFile(path))
+	{
+		LogError("Could not read %s", path);
+		delete g_Presets;
+	}
+}
+
+public Action Cmd_Presets(int client, int args)
+{
+	if (CheckReady(client))
+		ShowPresetMenu(client);
+	return Plugin_Handled;
+}
+
+void ShowPresetMenu(int client)
+{
+	Menu menu = new Menu(Handler_PresetList);
+	menu.SetTitle("Preset loadouts\nKnife, gloves and skins with matching sticker crafts");
+	char name[64], desc[128], line[200];
+	int count = 0;
+	if (g_Presets != null)
+	{
+		g_Presets.Rewind();
+		if (g_Presets.GotoFirstSubKey())
+		{
+			do
+			{
+				g_Presets.GetSectionName(name, sizeof(name));
+				g_Presets.GetString("description", desc, sizeof(desc));
+				if (desc[0] != '\0')
+					Format(line, sizeof(line), "%s\n   %s", name, desc);
+				else
+					strcopy(line, sizeof(line), name);
+				menu.AddItem(name, line);
+				count++;
+			}
+			while (g_Presets.GotoNextKey());
+		}
+		g_Presets.Rewind();
+	}
+	if (count == 0)
+		menu.AddItem("", "No presets (configs/csgo_loadout_presets.cfg missing)", ITEMDRAW_DISABLED);
+	menu.ExitBackButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int Handler_PresetList(Menu menu, MenuAction action, int client, int item)
+{
+	if (action == MenuAction_End)
+		delete menu;
+	else if (action == MenuAction_Select)
+	{
+		char name[64];
+		menu.GetItem(item, name, sizeof(name));
+		ShowPresetDetail(client, name);
+	}
+	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+		ShowMainMenu(client);
+	return 0;
+}
+
+bool JumpToPreset(const char[] name)
+{
+	if (g_Presets == null)
+		return false;
+	g_Presets.Rewind();
+	return g_Presets.JumpToKey(name);
+}
+
+void ShowPresetDetail(int client, const char[] name)
+{
+	if (!JumpToPreset(name))
+	{
+		ShowPresetMenu(client);
+		return;
+	}
+	Menu menu = new Menu(Handler_PresetDetail);
+	menu.SetTitle("%s", name);
+	menu.AddItem(name, "EQUIP THIS SET");
+
+	char line[128], paint[NAME_LEN];
+	WeaponInfo w;
+	GloveInfo g;
+	int def = g_Presets.GetNum("knife", 0);
+	if (def != 0 && GetWeaponByDef(def, w))
+	{
+		GetPaintName(g_Presets.GetNum("knife_paint", 0), paint, sizeof(paint));
+		Format(line, sizeof(line), "%s | %s", w.name, paint);
+		menu.AddItem("", line, ITEMDRAW_DISABLED);
+	}
+	def = g_Presets.GetNum("glove", 0);
+	if (def != 0 && GetGloveByDef(def, g))
+	{
+		GetPaintName(g_Presets.GetNum("glove_paint", 0), paint, sizeof(paint));
+		Format(line, sizeof(line), "%s | %s", g.name, paint);
+		menu.AddItem("", line, ITEMDRAW_DISABLED);
+	}
+	if (g_Presets.JumpToKey("weapons") && g_Presets.GotoFirstSubKey())
+	{
+		char section[16];
+		do
+		{
+			g_Presets.GetSectionName(section, sizeof(section));
+			if (!GetWeaponByDef(StringToInt(section), w))
+				continue;
+			GetPaintName(g_Presets.GetNum("paint", 0), paint, sizeof(paint));
+			Format(line, sizeof(line), "%s | %s", w.name, paint);
+			menu.AddItem("", line, ITEMDRAW_DISABLED);
+		}
+		while (g_Presets.GotoNextKey());
+	}
+	g_Presets.Rewind();
+	menu.ExitBackButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int Handler_PresetDetail(Menu menu, MenuAction action, int client, int item)
+{
+	if (action == MenuAction_End)
+		delete menu;
+	else if (action == MenuAction_Select)
+	{
+		char name[64];
+		menu.GetItem(item, name, sizeof(name));
+		if (name[0] != '\0')
+			ApplyPreset(client, name);
+		ShowPresetMenu(client);
+	}
+	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+		ShowPresetMenu(client);
+	return 0;
+}
+
+void ApplyPreset(int client, const char[] name)
+{
+	if (!CheckReady(client) || !JumpToPreset(name))
+		return;
+
+	WeaponSkin s;
+	char key[16], list[64], parts[MAX_STICKER_SLOTS][12];
+	int defs[64], count = 0;
+	bool stickers = false;
+
+	// Knife
+	int knife = g_Presets.GetNum("knife", 0);
+	WeaponInfo w;
+	if (knife != 0 && GetWeaponByDef(knife, w))
+	{
+		g_Knife[client] = knife;
+		GetSkin(client, knife, s);
+		s.paint = g_Presets.GetNum("knife_paint", 0);
+		s.seed = g_Presets.GetNum("knife_seed", 0);
+		s.wear = 0.0001;
+		IntToString(knife, key, sizeof(key));
+		g_Skins[client].SetArray(key, s, sizeof(s));
+	}
+
+	// Gloves
+	int glove = g_Presets.GetNum("glove", 0);
+	GloveInfo g;
+	if (glove != 0 && GetGloveByDef(glove, g))
+	{
+		g_GloveDef[client] = glove;
+		g_GlovePaint[client] = g_Presets.GetNum("glove_paint", 0);
+		g_GloveWear[client] = 0.0001;
+		g_GloveSeed[client] = 0;
+	}
+
+	// Weapons + sticker crafts (keeps the player's StatTrak and name tags)
+	if (g_Presets.JumpToKey("weapons") && g_Presets.GotoFirstSubKey())
+	{
+		do
+		{
+			g_Presets.GetSectionName(key, sizeof(key));
+			int def = StringToInt(key);
+			if (!GetWeaponByDef(def, w))
+				continue;
+			GetSkin(client, def, s);
+			s.paint = g_Presets.GetNum("paint", 0);
+			s.seed = g_Presets.GetNum("seed", 0);
+			s.wear = 0.0001;
+			g_Presets.GetString("stickers", list, sizeof(list));
+			for (int i = 0; i < MAX_STICKER_SLOTS; i++)
+			{
+				parts[i][0] = '\0';
+				s.sticker[i] = 0;
+				s.stickerWear[i] = 0.0;
+			}
+			int n = ExplodeString(list, " ", parts, sizeof(parts), sizeof(parts[]));
+			for (int i = 0; i < n && i < MAX_STICKER_SLOTS; i++)
+			{
+				s.sticker[i] = StringToInt(parts[i]);
+				if (s.sticker[i] != 0)
+					stickers = true;
+			}
+			g_Skins[client].SetArray(key, s, sizeof(s));
+			if (count < sizeof(defs))
+				defs[count++] = def;
+		}
+		while (g_Presets.GotoNextKey());
+	}
+	g_Presets.Rewind();
+	SavePlayer(client);
+
+	PrintToChat(client, "%sEquipped \x04%s\x01 — knife, gloves and %d weapon skins with sticker crafts.", PREFIX, name, count);
+	if (!IsPlayerAlive(client))
+		return;
+
+	// Redraw what the player is holding now.
+	int size = GetEntPropArraySize(client, Prop_Send, "m_hMyWeapons");
+	int held[64], heldCount = 0;
+	for (int i = 0; i < size && heldCount < sizeof(held); i++)
+	{
+		int wep = GetEntPropEnt(client, Prop_Send, "m_hMyWeapons", i);
+		if (wep == -1 || !IsValidEntity(wep))
+			continue;
+		int wdef = GetEntProp(wep, Prop_Send, "m_iItemDefinitionIndex");
+		if (IsKnifeDef(wdef))
+			continue;
+		for (int j = 0; j < count; j++)
+		{
+			if (defs[j] == wdef)
+			{
+				held[heldCount++] = wdef;
+				break;
+			}
+		}
+	}
+	for (int i = 0; i < heldCount; i++)
+		RefreshWeapon(client, held[i]);
+	if (knife != 0)
+		RefreshWeapon(client, 42);
+	ApplyGloves(client, true);
+	if (stickers && heldCount > 0 && GetFeatureStatus(FeatureType_Native, "PTaH_ForceFullUpdate") == FeatureStatus_Available)
+		CreateTimer(0.3, Timer_FullUpdate, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+	ShowPreview(client, 3.0);
 }
