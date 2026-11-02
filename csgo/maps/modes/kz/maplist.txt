@@ -1,0 +1,6 @@
+// Standard maps for KZ (climb) - one map name per line.
+// Installed maps are listed at the top of the !gamemode map menu;
+// missing ones are shown greyed out as (not installed).
+// Edit freely. Lines starting with // are ignored.
+kz_experiment
+kz_exps_cursedjourney

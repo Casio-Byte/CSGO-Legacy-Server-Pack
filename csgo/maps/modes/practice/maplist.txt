@@ -1,0 +1,9 @@
+// Standard maps for Practice - one map name per line.
+// Installed maps are listed at the top of the !gamemode map menu;
+// missing ones are shown greyed out as (not installed).
+// Edit freely. Lines starting with // are ignored.
+de_mirage
+de_inferno
+de_dust2
+de_nuke
+de_ancient

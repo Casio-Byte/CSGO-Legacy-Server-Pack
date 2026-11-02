@@ -1,0 +1,7 @@
+# Written by start_server.bat setup - private
+csgo/launcher_settings.cmd
+# Runtime data
+csgo/addons/sourcemod/logs/
+csgo/addons/sourcemod/data/csgo_loadout/
+csgo/addons/sourcemod/data/csgo_match_admins.txt
+csgo/addons/sourcemod/data/sqlite/

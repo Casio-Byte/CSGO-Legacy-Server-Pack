@@ -1,0 +1,12 @@
+// Standard maps for Competitive 5v5 - one map name per line.
+// Installed maps are listed at the top of the !gamemode map menu;
+// missing ones are shown greyed out as (not installed).
+// Edit freely. Lines starting with // are ignored.
+de_dust2
+de_mirage
+de_inferno
+de_nuke
+de_overpass
+de_vertigo
+de_ancient
+de_anubis

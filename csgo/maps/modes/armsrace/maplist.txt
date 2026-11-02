@@ -1,0 +1,8 @@
+// Standard maps for Arms Race - one map name per line.
+// Installed maps are listed at the top of the !gamemode map menu;
+// missing ones are shown greyed out as (not installed).
+// Edit freely. Lines starting with // are ignored.
+ar_baggage
+ar_shoots
+ar_monastery
+ar_pool_day

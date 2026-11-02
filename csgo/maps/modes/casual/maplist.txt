@@ -1,0 +1,8 @@
+// Standard maps for Casual - one map name per line.
+// Installed maps are listed at the top of the !gamemode map menu;
+// missing ones are shown greyed out as (not installed).
+// Edit freely. Lines starting with // are ignored.
+de_dust2
+cs_office
+cs_italy
+de_mirage

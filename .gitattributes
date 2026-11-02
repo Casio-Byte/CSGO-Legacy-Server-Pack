@@ -1,0 +1,8 @@
+*.bat -text
+*.cmd -text
+*.cfg -text
+*.txt -text
+*.smx binary
+*.dll binary
+*.vtf binary
+*.bsp binary

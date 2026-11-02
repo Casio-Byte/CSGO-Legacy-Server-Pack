@@ -1,0 +1,7 @@
+// Standard maps for Bhop - one map name per line.
+// Installed maps are listed at the top of the !gamemode map menu;
+// missing ones are shown greyed out as (not installed).
+// Edit freely. Lines starting with // are ignored.
+bhop_xof
+bhop_skyruins
+bhop_zygos

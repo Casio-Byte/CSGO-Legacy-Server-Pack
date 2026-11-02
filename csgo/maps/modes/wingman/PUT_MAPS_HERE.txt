@@ -1,0 +1,28 @@
+Maps for: Wingman 2v2
+=====================
+
+Put .bsp map files for this game mode in this folder:
+    csgo\maps\modes\wingman\
+
+When an admin picks "Wingman 2v2" in !gamemode (or !1v1), the map menu shows:
+  1. every .bsp in this folder
+  2. the installed maps from maplist.txt
+  3. other suitable maps on the server
+  4. maplist.txt maps that aren't installed, greyed out
+
+Standard maps for this mode (maplist.txt):
+    de_shortdust, de_shortnuke, de_lake, gd_rialto, de_inferno, de_overpass
+
+These are official CS:GO maps, so they're already installed with the
+server - nothing to download. Any that are missing from your install
+show greyed out in the menu.
+
+  - Copy the .bsp file (and its .nav file, if it has one) here.
+  - The file name is the map name: surf_mesa.bsp shows as surf_mesa.
+  - Add or remove names in maplist.txt to change the standard list.
+  - No restart needed - just open the menu again.
+  - If the map needs extra files (models, sounds, materials), put those in
+    the normal csgo\models, csgo\sound and csgo\materials folders, or use a
+    map whose .bsp has them packed in.
+
+You can delete this text file.
