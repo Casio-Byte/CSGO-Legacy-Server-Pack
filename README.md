@@ -124,6 +124,16 @@ This downloads the arena maps listed in each mode's `downloads.txt`, from varq.n
 
 Commands work with `!` (`!ready`), `.` (`.ready`) or `sm_<command>` from the console.
 
+Commands only work in the modes they belong to; anywhere else they say so. `!help` lists just the commands for the current mode.
+
+| Commands | Work in |
+|---|---|
+| `!ready` `!pause` `!stop`, side pick, `!start` `!restart` etc. | Competitive 5v5, Wingman 2v2, 1v1 match (and Practice) |
+| `!bo3` `!bo1` `!series` `!endseries` | Competitive 5v5 |
+| `!duel` `!accept` `!decline` `!forfeit` | 1v1 match, Multi-1v1 arenas |
+| `!guns` `!sitout` `!rank` | Multi-1v1 arenas |
+| skins, `!gamemode`, `!1v1`, `!map`, `!options`, `!help`, `!status` | everywhere |
+
 ### Game modes: `!gamemode` (admins)
 Pick a mode, then a map. The server switches 5 seconds later, and the mode survives map changes.
 

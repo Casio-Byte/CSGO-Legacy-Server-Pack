@@ -285,6 +285,16 @@ CHAT COMMANDS
 Every command works with "!" (e.g. !ready). Match commands also work
 with "." (e.g. .ready). From the console, use sm_<command>.
 
+Commands only work in the modes they belong to (anything else says so):
+  !ready, !pause, !stop, side pick, !start/!restart etc.
+                        Competitive 5v5, Wingman 2v2, 1v1 match (and
+                        Practice)
+  !bo3 / !bo1 / !series Competitive 5v5 only
+  !duel and its answers 1v1 match and Multi-1v1 arenas only
+  !guns / !sitout / !rank  Multi-1v1 arenas only
+  Skins (!ws etc.), !gamemode, !1v1, !map, !options, !help, !status work
+  everywhere. !help lists just the commands for the current mode.
+
 Game modes (admins)
   !gamemode  (!mode)    menu with every mode. Pick one, then a map, and the
                         server switches 5 seconds later:
@@ -428,7 +438,7 @@ Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
   !rank                 which arena you're in (and your duel score)
   Settings: cfg\csgo_match\arena.cfg
 
-1v1 duel - !duel (anyone, from warmup or during arenas; also in !1v1)
+1v1 duel - !duel (1v1 match warmup or during arenas; also in !1v1)
   !duel                 set up a duel in 4 steps:
                           1. opponent: list of everyone on the server
                           2. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,

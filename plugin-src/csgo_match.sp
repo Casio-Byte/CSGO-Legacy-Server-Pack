@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.9.3-20261103"
+#define PLUGIN_VERSION "1.10.0-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -678,8 +678,81 @@ bool Is(const char[] a, const char[] b)
 	return StrEqual(a, b, false);
 }
 
+bool IsAny(const char[] cmd, const char[] list)
+{
+	// list is space separated, e.g. "ready r rdy"
+	char parts[24][16];
+	int n = ExplodeString(list, " ", parts, sizeof(parts), sizeof(parts[]));
+	for (int i = 0; i < n; i++)
+	{
+		if (parts[i][0] != '\0' && StrEqual(cmd, parts[i], false))
+			return true;
+	}
+	return false;
+}
+
+// Duels exist only in the 1v1 modes.
+bool DuelModeActive()
+{
+	return g_State == State_Duel || g_State == State_Arena || CurrentMode() == GM_1v1Match;
+}
+
+// Commands only work in the game modes they belong to.
+bool CommandAllowedHere(int client, const char[] cmd)
+{
+	char mode[40];
+	GetModeName(mode, sizeof(mode));
+
+	// Ready-up match flow: Competitive, Wingman, 1v1 match.
+	if (IsAny(cmd, "ready r rdy unready ur notready pause tech unpause tac stay switch swap t ct stop")
+		|| IsAny(cmd, "start forcestart restart endmatch reset knife knifetoggle forceready forceunpause fup")
+		|| IsAny(cmd, "team1 team2 restore readyrequired prac"))
+	{
+		if (!IsMatchMode() && g_State != State_Practice)
+		{
+			Reply(client, "That's a match command — it works in Competitive 5v5, Wingman and 1v1 match. Now: \x04%s\x01.", mode);
+			return false;
+		}
+		return true;
+	}
+	// Best of 3: Competitive 5v5 only.
+	if (IsAny(cmd, "bo3 veto bo1 series maps3 endseries cancelseries"))
+	{
+		if (CurrentMode() != GM_Competitive && !g_SeriesActive && !g_VetoRunning)
+		{
+			Reply(client, "Best of 3 is for Competitive 5v5 only. Now: \x04%s\x01.", mode);
+			return false;
+		}
+		return true;
+	}
+	// Duels: 1v1 match and Multi-1v1 arenas only.
+	if (IsAny(cmd, "duel accept decline forfeit ff endduel"))
+	{
+		if (!DuelModeActive())
+		{
+			Reply(client, "!duel only works in the 1v1 modes (1v1 match or Multi-1v1 arenas). Now: \x04%s\x01. Admins can switch with \x04!1v1\x01.", mode);
+			return false;
+		}
+		return true;
+	}
+	// Arena commands.
+	if (IsAny(cmd, "guns sitout rank"))
+	{
+		if (g_State != State_Arena && CurrentMode() != GM_Arena)
+		{
+			Reply(client, "That only works in Multi-1v1 arenas. Now: \x04%s\x01.", mode);
+			return false;
+		}
+		return true;
+	}
+	return true;
+}
+
 void Dispatch(int client, const char[] cmd, const char[] arg)
 {
+	if (!CommandAllowedHere(client, cmd))
+		return;
+
 	// players
 	if (Is(cmd, "ready") || Is(cmd, "r") || Is(cmd, "rdy"))         Cmd_Ready(client, true);
 	else if (Is(cmd, "unready") || Is(cmd, "ur") || Is(cmd, "notready")) Cmd_Ready(client, false);
@@ -1190,28 +1263,43 @@ void RestoreFile(const char[] file)
 
 void Cmd_Help(int client)
 {
-	Reply(client, "\x04Players:\x01 !ready !unready !pause !tech !unpause !tac !stop !status");
-	Reply(client, "\x04Knife winners:\x01 !stay !switch !t !ct");
-	if (IsAdmin(client))
+	char mode[40];
+	GetModeName(mode, sizeof(mode));
+	bool admin = IsAdmin(client);
+	Reply(client, "Mode: \x04%s\x01 — commands that work now:", mode);
+
+	if (IsMatchMode() || g_State == State_Practice)
 	{
-		Reply(client, "\x04Admin:\x01 !start !restart !knifetoggle !forceready !fup !team1 <name> !team2 <name>");
-		Reply(client, "\x04Admin:\x01 !readyrequired <n> !restore <n> !prac !exitprac");
+		Reply(client, "\x04Match:\x01 !ready !unready !pause !tech !unpause !tac !stop !status");
+		Reply(client, "\x04Knife winners:\x01 !stay !switch !t !ct");
+		if (admin)
+		{
+			Reply(client, "\x04Admin:\x01 !start !restart !knifetoggle !forceready !fup !team1 <name> !team2 <name>");
+			Reply(client, "\x04Admin:\x01 !readyrequired <n> !restore <n> !prac !exitprac");
+		}
 	}
-	Reply(client, "\x04Practice:\x01 !spawn <n> !clear !god");
-	Reply(client, "\x04 1v1:\x01 !1v1 (all 1v1 modes) !duel [name] (opponent, gun, rounds, headshots only) !accept !decline !forfeit");
+	if (g_State == State_Practice)
+		Reply(client, "\x04Practice:\x01 !spawn <n> !clear !god");
+	if (CurrentMode() == GM_Competitive || g_SeriesActive)
+	{
+		if (admin)
+			Reply(client, "\x04Best of 3:\x01 !bo3 (turn on) !bo1 (single map) !series (maps + score) !endseries");
+		else
+			Reply(client, "\x04Best of 3:\x01 !series shows the maps and score");
+	}
+	if (DuelModeActive())
+		Reply(client, "\x04Duel:\x01 !duel [name] (opponent, gun, rounds, headshots only) !accept !decline !forfeit");
 	if (g_State == State_Arena)
 		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank — !duel gets you your own arena");
-	if (!IsAdmin(client))
+	Reply(client, "\x04Skins:\x01 !ws !presets !knife !gloves !agents !stickers");
+	if (admin)
+		Reply(client, "\x04Modes:\x01 !gamemode !1v1 !map !options");
+	else
+	{
+		Reply(client, "\x04Modes:\x01 !gamemode shows the current mode, !1v1 the 1v1 modes");
 		Reply(client, "\x04Admin:\x01 /login <password>");
-	if (IsAdmin(client))
-		Reply(client, "\x04Modes:\x01 !gamemode (all game modes)  !options (match settings)");
-	else
-		Reply(client, "\x04Modes:\x01 !gamemode shows the current mode");
-	if (IsAdmin(client))
-		Reply(client, "\x04Best of 3:\x01 !bo3 (turn on) !bo1 (single map) !series (maps + score) !endseries");
-	else
-		Reply(client, "\x04Best of 3:\x01 !series shows the maps and score");
-	Reply(client, "Every command also works with a dot, e.g. .ready");
+	}
+	Reply(client, "Commands also work with a dot, e.g. .ready");
 }
 
 void Cmd_Status(int client)
@@ -3513,7 +3601,8 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 		return;
 	if (arg[0] != '\0')
 	{
-		Cmd_Duel(client, arg); // "!1v1 name" still challenges directly
+		if (CommandAllowedHere(client, "duel"))
+			Cmd_Duel(client, arg); // "!1v1 name" still challenges directly
 		return;
 	}
 
@@ -3523,7 +3612,10 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 
 	Menu menu = new Menu(Handler_OneVOne);
 	menu.SetTitle("1v1 modes\nNow: %s", mode);
-	menu.AddItem("duel", "!duel — pick an opponent, then gun, rounds, headshots only");
+	if (DuelModeActive())
+		menu.AddItem("duel", "!duel — pick an opponent, then gun, rounds, headshots only");
+	else
+		menu.AddItem("duel", "!duel (only in 1v1 match / arenas)", ITEMDRAW_DISABLED);
 	menu.AddItem("match", admin ? "1v1 match — ready-up MR15, one per side" : "1v1 match (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	menu.AddItem("arena", admin ? "Multi-1v1 arenas — ladder on am_ maps" : "Multi-1v1 arenas (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	if (g_State == State_Arena)
