@@ -435,7 +435,7 @@ Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
   !duel                 set up a duel in 4 steps:
                           1. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,
                              Glock, P250, random each round, or knives
-                          2. rounds: first to 5, 10, 16 or 25 kills
+                          2. rounds: first to 30, 50 or 100 kills
                           3. headshots only, or normal (every hit counts)
                           4. opponent: anyone on the server
   !duel <name>          same, but with that player as the opponent

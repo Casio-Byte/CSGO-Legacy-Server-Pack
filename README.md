@@ -183,7 +183,7 @@ Also included: SourceTV demo recording per match and round backups.
 - `!1v1` opens a menu with every 1v1 mode.
 - **Duel**: `!duel`, also in the `!1v1` menu. You set it up in four steps:
   1. **gun**: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S, Glock, P250, random each round, or knives
-  2. **rounds**: first to 5, 10, 16 or 25 kills
+  2. **rounds**: first to 30, 50 or 100 kills
   3. **headshots only**, or normal
   4. **opponent**: anyone on the server
 

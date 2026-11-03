@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.7.0-20261103"
+#define PLUGIN_VERSION "1.7.1-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -1861,10 +1861,9 @@ void ShowDuelTargetMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelTarget);
 	menu.SetTitle("1v1 duel — step 2 of 4: rounds\n%s — first to how many kills?", g_DuelWepName[g_PickWeapon[client]]);
-	menu.AddItem("5", "First to 5");
-	menu.AddItem("10", "First to 10");
-	menu.AddItem("16", "First to 16");
-	menu.AddItem("25", "First to 25");
+	menu.AddItem("30", "First to 30");
+	menu.AddItem("50", "First to 50");
+	menu.AddItem("100", "First to 100");
 	menu.ExitBackButton = true;
 	menu.Display(client, 60);
 }
