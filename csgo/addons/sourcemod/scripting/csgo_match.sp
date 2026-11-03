@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.6.0-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -168,6 +168,9 @@ float g_StageAng[MAXPLAYERS + 1][SURF_MAX_STAGES][3];
 int   g_StageCount[MAXPLAYERS + 1];
 bool  g_FreshStart[MAXPLAYERS + 1];   // next spawn is a real restart (!r, join)
 bool  g_TeleportPending[MAXPLAYERS + 1];
+float g_LastPos[MAXPLAYERS + 1][3];
+bool  g_HaveLast[MAXPLAYERS + 1];
+int   g_IgnoreJump[MAXPLAYERS + 1];   // ticks to ignore after the plugin itself moves someone
 float g_CpPos[MAXPLAYERS + 1][MAX_CPS][3];
 float g_CpAng[MAXPLAYERS + 1][MAX_CPS][3];
 int   g_CpCount[MAXPLAYERS + 1];
@@ -658,6 +661,8 @@ public void OnPluginStart()
 	g_cvSurfAutoRestart = CreateConVar("match_surf_auto_restart", "1", "Surf: falling sends you back to the start, or to the start of the last stage you reached (1 = on)", _, true, 0.0, true, 1.0);
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
+	PrintToServer("[Match] CS:GO Match %s loaded", PLUGIN_VERSION);
 
 	AutoExecConfig(true, "csgo_match");
 
@@ -1748,6 +1753,8 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 		{
 			SetEntProp(mover, Prop_Data, "m_CollisionGroup", 2); // pass through other players
 			ResetMapProgress(mover); // a spawn is a fresh start on the map
+			g_HaveLast[mover] = false;
+			g_IgnoreJump[mover] = 16;
 			CreateTimer(0.1, Timer_SurfSpawn, GetClientUserId(mover), TIMER_FLAG_NO_MAPCHANGE);
 		}
 		return;
@@ -3780,6 +3787,7 @@ void Cmd_TeleportCp(int client, int step)
 		SetEntityMoveType(client, MOVETYPE_WALK);
 
 	float zero[3];
+	g_IgnoreJump[client] = 16;
 	TeleportEntity(client, g_CpPos[client][idx], g_CpAng[client][idx], zero);
 	if (step != 0)
 		PrintHintText(client, "Checkpoint %d / %d", idx + 1, g_CpCount[client]);
@@ -6213,6 +6221,7 @@ public Action Timer_SurfSpawn(Handle timer, int userid)
 	}
 	// Died after finishing a stage: back to that stage.
 	int s = g_StageCount[client] - 1;
+	g_IgnoreJump[client] = 16;
 	TeleportEntity(client, g_StagePos[client][s], g_StageAng[client][s], view_as<float>({0.0, 0.0, 0.0}));
 	return Plugin_Stop;
 }
@@ -6251,6 +6260,7 @@ public Action Timer_SurfAfterTeleport(Handle timer, int userid)
 	float zero[3];
 	if (g_StageCount[client] == 0)
 	{
+		g_IgnoreJump[client] = 16;
 		TeleportEntity(client, g_SpawnPos[client], g_SpawnAng[client], zero);
 		ResetMapProgress(client);
 	}
@@ -6258,7 +6268,40 @@ public Action Timer_SurfAfterTeleport(Handle timer, int userid)
 	{
 		int s = g_StageCount[client] - 1;
 		if (GetVectorDistance(pos, g_StagePos[client][s]) > 64.0)
+		{
+			g_IgnoreJump[client] = 16;
 			TeleportEntity(client, g_StagePos[client][s], g_StageAng[client][s], zero);
+		}
 	}
 	return Plugin_Stop;
+}
+
+// Catch every map teleport, not only trigger_teleport (some maps move you with
+// point_teleport or outputs): a position jump far bigger than the player's
+// speed can explain is a teleport.
+public void OnPlayerRunCmdPost(int client, int buttons, int impulse, const float vel[3], const float angles[3],
+	int weapon, int subtype, int cmdnum, int tickcount, int seed, const int mouse[2])
+{
+	if (!SurfAutoOn() || IsFakeClient(client) || !IsPlayerAlive(client) || GetEntityMoveType(client) == MOVETYPE_NOCLIP)
+	{
+		g_HaveLast[client] = false;
+		return;
+	}
+	float pos[3];
+	GetClientAbsOrigin(client, pos);
+	if (g_HaveLast[client] && g_IgnoreJump[client] == 0 && !g_TeleportPending[client])
+	{
+		float v[3];
+		GetEntPropVector(client, Prop_Data, "m_vecAbsVelocity", v);
+		float expected = GetVectorLength(v) * GetTickInterval() * 3.0 + 150.0;
+		if (GetVectorDistance(pos, g_LastPos[client]) > expected)
+		{
+			g_TeleportPending[client] = true;
+			CreateTimer(0.1, Timer_SurfAfterTeleport, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+		}
+	}
+	if (g_IgnoreJump[client] > 0)
+		g_IgnoreJump[client]--;
+	g_LastPos[client] = pos;
+	g_HaveLast[client] = true;
 }

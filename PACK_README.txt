@@ -173,6 +173,10 @@ UNINSTALL / BACK TO PLAIN CS:GO
     to remove it for good.
   - Never touched: the game, steam.inf, mapcycle.txt, maplist.txt and the
     official maps.
+  - Option: keep start_server.bat. The server then still starts the same
+    way (same name, passwords, LAN/internet, FastDL, map downloader) but as
+    plain CS:GO without Metamod, SourceMod or plugins. server.cfg is set to
+    load your settings. Run the uninstaller again to remove the launcher too.
 
 MAP FOLDERS
 -----------

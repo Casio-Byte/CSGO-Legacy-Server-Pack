@@ -13,6 +13,11 @@ rem  back - choose "delete" to remove it for good.
 rem
 rem  Not touched: the game itself, steam.inf, mapcycle.txt, maplist.txt,
 rem  your official maps, and anything else CS:GO installed.
+rem
+rem  Option: keep start_server.bat (and FastDL / the map downloader) so you can
+rem  still start the server the same way, just without Metamod/SourceMod and
+rem  the plugins. Your server name, passwords and LAN/internet setting keep
+rem  working (server.cfg loads them).
 rem ==================================================================
 
 set "CSGO_DIR=%~dp0"
@@ -111,6 +116,32 @@ if ($hasMaps) {
     $removeMaps = ($a -match '^[Yy]')
 }
 
+# Keep the launcher (start_server.bat) so the server still starts the same way, without plugins.
+$keepLauncher = $false
+if (Test-Path (Join-Path $csgo 'start_server.bat')) {
+    Write-Host ''
+    Write-Host 'Keep start_server.bat so you can still start the server with it (same name,'
+    Write-Host 'passwords and LAN/internet setting, FastDL and the map downloader) - just'
+    $a = Read-Host 'without Metamod, SourceMod and the plugins? (Y/N) [N]'
+    $keepLauncher = ($a -match '^[Yy]')
+}
+$keepFiles = @('start_server.bat', 'start_fastdl.bat', 'download_community_maps.bat', 'launcher_settings.cmd',
+               'cfg\server.cfg', 'cfg\csgo_match\server_settings.cfg', 'cfg\csgo_match\fastdl.cfg')
+if ($keepLauncher) {
+    # Remove cfg\csgo_match file by file, keeping the launcher's two settings files.
+    $expanded = New-Object System.Collections.ArrayList
+    foreach ($i in $found) {
+        if ($i[0] -eq 'cfg\csgo_match') {
+            Get-ChildItem (Join-Path $csgo 'cfg\csgo_match') -File -ErrorAction SilentlyContinue | ForEach-Object {
+                [void]$expanded.Add(@("cfg\csgo_match\$($_.Name)", ''))
+            }
+        } else { [void]$expanded.Add($i) }
+    }
+    $found = @($expanded | Where-Object { $keepFiles -notcontains $_[0] })
+    Write-Host '  Keeping: start_server.bat, start_fastdl.bat, download_community_maps.bat,' -ForegroundColor DarkGray
+    Write-Host '           launcher_settings.cmd, cfg\server.cfg and your server settings.' -ForegroundColor DarkGray
+}
+
 Write-Host ''
 Write-Host '  B = move everything to a backup folder (can be put back)  [default]'
 Write-Host '  D = delete permanently'
@@ -157,10 +188,28 @@ foreach ($d in @('materials\decals', 'addons')) {
     if ((Test-Path $p) -and -not (Get-ChildItem $p -Force -ErrorAction SilentlyContinue)) { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 }
 
+# Without the plugins nothing loads the launcher's settings any more, so
+# server.cfg loads them (server name, passwords, LAN/internet, FastDL address).
+if ($keepLauncher) {
+    $cfgFile = Join-Path $csgo 'cfg\server.cfg'
+    $lines = @()
+    if (Test-Path $cfgFile) { $lines = @(Get-Content $cfgFile) }
+    $add = @()
+    if (-not ($lines -match '^\s*exec\s+csgo_match/server_settings')) { $add += 'exec csgo_match/server_settings.cfg' }
+    if (-not ($lines -match '^\s*exec\s+csgo_match/fastdl'))          { $add += 'exec csgo_match/fastdl.cfg' }
+    if ($add.Count -gt 0) {
+        $lines += ''
+        $lines += '// Added by uninstall_server_pack.bat: the launcher''s settings (no plugins load them now)'
+        $lines += $add
+        Set-Content -Path $cfgFile -Value $lines
+        Write-Host '  server.cfg now loads your server settings' -ForegroundColor DarkGray
+    }
+}
+
 # Windows firewall rules / port permission added by FastDL and the setup.
 $rules = @(netsh advfirewall firewall show rule name=all 2>$null | Select-String -Pattern '^Rule Name:\s+(CS:GO FastDL|CSGO-server-\d+)\s*$' | ForEach-Object { $_.Matches[0].Groups[1].Value }) | Select-Object -Unique
 $acl = [bool](netsh http show urlacl url=http://+:27020/ 2>$null | Select-String ':27020/')
-if ($rules.Count -gt 0 -or $acl) {
+if (($rules.Count -gt 0 -or $acl) -and -not $keepLauncher) {
     Write-Host ''
     $a = Read-Host 'Also remove the Windows Firewall rules and port permission the pack added? (asks for admin) (Y/N) [Y]'
     if (-not ($a -match '^[Nn]')) {
@@ -185,6 +234,12 @@ if ($delete) {
     Write-Host 'Done - the server pack is removed. Everything is in:' -ForegroundColor Green
     Write-Host "  $backup"
     Write-Host 'To undo: move the contents of that folder back into csgo. Delete the folder when you no longer need it.'
+}
+if ($keepLauncher) {
+    Write-Host 'Start the server with start_server.bat as before - it now runs plain CS:GO.'
+    Write-Host 'Run uninstall_server_pack.bat again (and answer N to keeping the launcher) to remove it too.'
+    Write-Host ''
+    exit 0
 }
 Write-Host 'Start the server with your own launch line now (srcds.exe -game csgo ...).'
 Write-Host ''

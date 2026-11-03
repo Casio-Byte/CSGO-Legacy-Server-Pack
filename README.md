@@ -112,7 +112,7 @@ This puts the server back to plain CS:GO. It removes:
 - the launcher scripts and their settings
 - optionally, the firewall rules and port permission
 
-Close the server before running it. It lists everything and asks first. By default it **moves** the files to `csgo/_server_pack_backup_<date>` so you can undo it; choosing delete removes them for good. Community maps are kept unless you choose otherwise. The game, `steam.inf`, the map cycle files and the official maps are never touched.
+Close the server before running it. It lists everything and asks first. By default it **moves** the files to `csgo/_server_pack_backup_<date>` so you can undo it; choosing delete removes them for good. Community maps are kept unless you choose otherwise. You can also choose to **keep `start_server.bat`** (with FastDL and the map downloader). The server then still starts the same way, with the same name, passwords and LAN/internet setting, but as plain CS:GO with no plugins; `server.cfg` is set to load your settings. The game, `steam.inf`, the map cycle files and the official maps are never touched.
 
 ## Community maps: `download_community_maps.bat`
 

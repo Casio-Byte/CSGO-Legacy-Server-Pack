@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.4.0-20261103"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
