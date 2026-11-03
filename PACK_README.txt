@@ -342,6 +342,19 @@ Game modes (admins)
                           reset all to defaults
                         Choices are saved and override csgo_match.cfg.
 
+  Maps only go with the modes they're made for:
+    am_ maps                        Multi-1v1 arenas only
+    aim_ / awp_ / 1v1_ maps         1v1 duels only
+    ar_ maps                        Arms Race only
+    normal maps (de_, cs_, gd_...)  Competitive, Wingman, Casual,
+                                    Deathmatch, Demolition, Practice
+    kz_ / bhop_ / surf_ maps        no mode (those modes were removed)
+  A map you put in a mode's own folder always counts for that mode. The
+  map menus only list fitting maps; !map on a map that doesn't suit the
+  current mode asks which fitting mode to switch to; best of 3 only votes
+  on normal maps. If a mode is started on an unfitting map from the
+  console, admins get a warning.
+
   The chosen mode stays across map changes. Restarting the server goes back
   to the mode in your launch line (+game_type 0 +game_mode 1 = Competitive).
   In Casual, Deathmatch, Arms Race and Demolition the game runs its own

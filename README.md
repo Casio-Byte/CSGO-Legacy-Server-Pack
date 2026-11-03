@@ -146,6 +146,15 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
 
+**Maps only go with the modes they're made for:**
+- `am_` maps: Multi-1v1 arenas
+- `aim_`, `awp_` and `1v1_` maps: 1v1 duels
+- `ar_` maps: Arms Race
+- normal maps (`de_`, `cs_`, `gd_` …): Competitive, Wingman, Casual, Deathmatch, Demolition and Practice
+- `kz_`, `bhop_` and `surf_` maps: no mode
+
+A map in a mode's own folder always counts for that mode. The map menus only list maps that fit, and `!map` on a map that doesn't suit the current mode asks which fitting mode to switch to.
+
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
 ### Match flow

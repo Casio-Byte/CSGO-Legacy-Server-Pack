@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.11.0-20261103"
+#define PLUGIN_VERSION "1.12.0-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -2701,6 +2701,7 @@ char g_ArmsRaceMaps[][] = { "ar_baggage", "ar_shoots", "ar_monastery", "ar_dizzy
 char g_DemolitionMaps[][] = { "de_lake", "de_safehouse", "de_shortdust", "de_shortnuke", "de_bank", "de_stmarc", "de_sugarcane" };
 
 int  g_PickMode[MAXPLAYERS + 1];
+int  g_MenuGm = -1;   // mode the map menu being built is for (-1 = any)
 int  g_SwitchMode = -1;
 char g_SwitchMap[PLATFORM_MAX_PATH];
 
@@ -2756,6 +2757,7 @@ bool IsMatchMode()
 void ApplyModeOnMapStart()
 {
 	SeriesOnMapStart();
+	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_PracticeNext)
 	{
 		EnterPractice();
@@ -2879,11 +2881,50 @@ public int Handler_GameMode(Menu menu, MenuAction action, int client, int item)
 	return 0;
 }
 
+// Which mode a map is made for, from its name:
+//   am_                          -> Multi-1v1 arenas
+//   aim_ awp_ 1v1_ training_aim  -> 1v1 duels
+//   ar_                          -> Arms Race
+//   kz_ bhop_ surf_ ...          -> no mode on this server (-2)
+//   anything else (de_, cs_, gd_...) -> a normal map (-1)
+int FittingModeForMap(const char[] path)
+{
+	char name[PLATFORM_MAX_PATH];
+	MapShortName(path, name, sizeof(name));
+	if (StrContains(name, "am_", false) == 0)
+		return GM_Arena;
+	if (StrContains(name, "aim_", false) == 0 || StrContains(name, "awp_", false) == 0
+		|| StrContains(name, "1v1_", false) == 0 || StrContains(name, "training_aim", false) == 0)
+		return GM_1v1Match;
+	if (StrContains(name, "ar_", false) == 0)
+		return GM_ArmsRace;
+	if (StrContains(name, "kz_", false) == 0 || StrContains(name, "kzpro_", false) == 0 || StrContains(name, "bkz_", false) == 0
+		|| StrContains(name, "xc_", false) == 0 || StrContains(name, "bhop_", false) == 0 || StrContains(name, "surf_", false) == 0)
+		return -2;
+	return -1;
+}
+
+// Does this map suit this game mode? A map in the mode's own folder always does.
+bool MapFitsMode(int gm, const char[] path)
+{
+	if (gm < 0)
+		return true;
+	if (ModeOfMapPath(path) == gm)
+		return true;
+	int want = FittingModeForMap(path);
+	if (want == -2)
+		return false;
+	if (want >= 0)
+		return want == gm;
+	// a normal map: every mode except the ones with their own map types
+	return gm != GM_Arena && gm != GM_1v1Match && gm != GM_ArmsRace;
+}
+
 void AddMapItem(Menu menu, const char[] map, StringMap seen)
 {
 	int dummy;
 	char path[PLATFORM_MAX_PATH];
-	if (seen.GetValue(map, dummy) || !ResolveMap(map, path, sizeof(path)))
+	if (seen.GetValue(map, dummy) || !MapFitsMode(g_MenuGm, map) || !ResolveMap(map, path, sizeof(path)))
 		return;
 	seen.SetValue(map, 1);
 	menu.AddItem(path, map);
@@ -2900,10 +2941,8 @@ void ShowModeMapMenu(int client)
 
 	char currentName[PLATFORM_MAX_PATH];
 	GetMapDisplayName(current, currentName, sizeof(currentName));
-	bool mapSpecific = (gm == GM_Arena || gm == GM_1v1Match);
-	char folderPrefix[PLATFORM_MAX_PATH];
-	Format(folderPrefix, sizeof(folderPrefix), "modes/%s/", g_GmFolder[gm]);
-	if (!mapSpecific || HasMovePrefix(currentName, gm) || StrContains(current, folderPrefix, false) == 0)
+	g_MenuGm = gm;
+	if (MapFitsMode(gm, current))
 	{
 		Format(line, sizeof(line), "Stay on %s", currentName);
 		menu.AddItem(current, line);
@@ -2950,6 +2989,7 @@ void ShowModeMapMenu(int client)
 	AddMissingStandardMaps(menu, gm, seen);
 	delete seen;
 
+	g_MenuGm = -1;
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -3002,6 +3042,11 @@ public Action Timer_SwitchMode(Handle timer)
 	if (!ResolveMap(g_SwitchMap, target, sizeof(target)))
 	{
 		Announce("\x02Can't switch: map %s isn't installed on the server.\x01 Nothing was changed.", g_SwitchMap);
+		return Plugin_Stop;
+	}
+	if (!MapFitsMode(gm, g_SwitchMap) && !MapFitsMode(gm, target))
+	{
+		Announce("\x02Can't switch: %s doesn't suit %s.\x01 Nothing was changed.", g_SwitchMap, g_GmName[gm]);
 		return Plugin_Stop;
 	}
 	strcopy(g_SwitchMap, sizeof(g_SwitchMap), target);
@@ -3365,7 +3410,7 @@ int TryAddMap(Menu menu, const char[] map, StringMap seen)
 	strcopy(display, sizeof(display), map[slash + 1]);
 
 	int dummy;
-	if (seen.GetValue(display, dummy))
+	if (seen.GetValue(display, dummy) || !MapFitsMode(g_MenuGm, map))
 		return 0;
 	seen.SetValue(display, 1);
 	menu.AddItem(map, display);
@@ -3537,7 +3582,7 @@ void AddMissingStandardMaps(Menu menu, int gm, StringMap seen)
 	for (int i = 0; i < list.Length; i++)
 	{
 		list.GetString(i, name, sizeof(name));
-		if (seen.GetValue(name, dummy) || MapInstalled(gm, name, path, sizeof(path)))
+		if (seen.GetValue(name, dummy) || MapInstalled(gm, name, path, sizeof(path)) || !MapFitsMode(gm, name))
 			continue;
 		seen.SetValue(name, 1);
 		Format(line, sizeof(line), "%s (not installed)", name);
@@ -4769,7 +4814,34 @@ void ChangeMapByName(int client, const char[] name)
 			Reply(client, "No map called \"%s\" on the server. Type \x04!map\x01 for the list.", name);
 		return;
 	}
-	ChangeMapOnly(client, path);
+	PickMapForCurrentMode(client, path);
+}
+
+// Change map, keeping the mode if the map suits it; otherwise ask which
+// (fitting) mode to switch to.
+void PickMapForCurrentMode(int client, const char[] path)
+{
+	int cur = CurrentMode();
+	int folderMode = ModeOfMapPath(path);
+	if (MapFitsMode(cur, path) && (folderMode < 0 || folderMode == cur))
+	{
+		ChangeMapOnly(client, path);
+		return;
+	}
+	char name[PLATFORM_MAX_PATH];
+	MapShortName(path, name, sizeof(name));
+	if (FittingModeForMap(path) == -2 && folderMode < 0)
+	{
+		Reply(client, "\x04%s\x01 isn't made for any game mode on this server (KZ/Bhop/Surf were removed).", name);
+		return;
+	}
+	if (client == 0)
+	{
+		Reply(client, "%s doesn't suit the current mode. Pick it in !gamemode with a mode it fits.", name);
+		return;
+	}
+	strcopy(g_MapPickPath[client], sizeof(g_MapPickPath[]), path);
+	ShowMapModeChoice(client, folderMode >= 0 ? folderMode : FittingModeForMap(path));
 }
 
 void ShowMapCategories(int client)
@@ -4865,6 +4937,8 @@ void ShowAllMapsList(int client, int cat)
 		list.GetArray(i, e);
 		if (cat != MAPCAT_ALL && e.cat != cat)
 			continue;
+		if (g_MapPickGm[client] >= 0 && !MapFitsMode(g_MapPickGm[client], e.path))
+			continue;
 
 		if (StrEqual(e.path, current, false))
 			Format(line, sizeof(line), "%s [current]", e.name);
@@ -4903,15 +4977,7 @@ public int Handler_AllMaps(Menu menu, MenuAction action, int client, int item)
 			return 0;
 		}
 
-		// Map from a mode folder while the server is in another mode: ask.
-		int folderMode = ModeOfMapPath(path);
-		if (folderMode >= 0 && folderMode != CurrentMode())
-		{
-			strcopy(g_MapPickPath[client], sizeof(g_MapPickPath[]), path);
-			ShowMapModeChoice(client, folderMode);
-			return 0;
-		}
-		ChangeMapOnly(client, path);
+		PickMapForCurrentMode(client, path);
 	}
 	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
 	{
@@ -4952,14 +5018,31 @@ void ShowMapModeChoice(int client, int gm)
 	char name[PLATFORM_MAX_PATH], mode[48], line[128], info[16];
 	GetMapDisplayName(g_MapPickPath[client], name, sizeof(name));
 	GetModeName(mode, sizeof(mode));
-
 	Menu menu = new Menu(Handler_MapModeChoice);
-	menu.SetTitle("%s is a %s map.\nThe server is in %s.", name, g_GmName[gm], mode);
-	IntToString(gm, info, sizeof(info));
-	Format(line, sizeof(line), "Switch to %s on %s", g_GmName[gm], name);
-	menu.AddItem(info, line);
-	Format(line, sizeof(line), "Just change the map (stay in %s)", mode);
-	menu.AddItem("keep", line);
+	if (gm >= 0)
+		menu.SetTitle("%s is a %s map.\nThe server is in %s.", name, g_GmName[gm], mode);
+	else
+		menu.SetTitle("%s doesn't suit %s.\nPick a mode for it:", name, mode);
+	int added = 0;
+	for (int i = 0; i < GM_COUNT; i++)
+	{
+		if (gm >= 0 && i != gm)
+			continue;
+		if (!MapFitsMode(i, g_MapPickPath[client]))
+			continue;
+		IntToString(i, info, sizeof(info));
+		Format(line, sizeof(line), "Switch to %s on %s", g_GmName[i], name);
+		menu.AddItem(info, line);
+		added++;
+	}
+	if (MapFitsMode(CurrentMode(), g_MapPickPath[client]))
+	{
+		Format(line, sizeof(line), "Just change the map (stay in %s)", mode);
+		menu.AddItem("keep", line);
+		added++;
+	}
+	if (added == 0)
+		menu.AddItem("", "No game mode fits this map", ITEMDRAW_DISABLED);
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -5337,7 +5420,7 @@ bool StartVeto()
 	for (int i = 0; i < names.Length && g_VetoPool.Length < VETO_MAX_POOL; i++)
 	{
 		names.GetString(i, name, sizeof(name));
-		if (!MapInstalled(GM_Competitive, name, path, sizeof(path)))
+		if (!MapInstalled(GM_Competitive, name, path, sizeof(path)) || !MapFitsMode(GM_Competitive, path))
 			continue;
 		bool dupe = false;
 		for (int j = 0; j < g_VetoPool.Length && !dupe; j++)
@@ -6054,5 +6137,26 @@ public Action Timer_DuelLobbyAnnounce(Handle timer)
 {
 	if (g_OneVOneNext && g_State == State_None)
 		Announce("\x04 1v1 duels\x01: warm up, then type \x04!duel\x01 to challenge someone (pick a player, gun, rounds, headshots only).");
+	return Plugin_Stop;
+}
+
+
+// A mode started on a map that doesn't suit it (e.g. changelevel from the
+// console): tell admins how to fix it.
+public Action Timer_CheckMapFit(Handle timer)
+{
+	char map[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH], mode[48];
+	GetCurrentMap(map, sizeof(map));
+	int gm = CurrentMode();
+	if (gm < 0 || MapFitsMode(gm, map))
+		return Plugin_Stop;
+	MapShortName(map, name, sizeof(name));
+	GetModeName(mode, sizeof(mode));
+	LogMessage("%s doesn't suit %s.", name, mode);
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i) && IsAdmin(i))
+			PrintToChat(i, "%s\x02%s doesn't suit %s.\x01 Pick a fitting map/mode with \x04!gamemode\x01 or \x04!map\x01.", PREFIX, name, mode);
+	}
 	return Plugin_Stop;
 }
