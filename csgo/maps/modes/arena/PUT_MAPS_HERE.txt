@@ -1,30 +1,21 @@
 Maps for: Multi-1v1 arenas
 ==========================
 
-Put .bsp map files for this game mode in this folder:
+This mode only uses multi-1v1 arena (am_) maps from the Steam Workshop.
+download_community_maps.bat downloads them straight from the Workshop
+(start_server.bat runs it for you) into this folder:
     csgo\maps\modes\arena\
 
-When an admin picks "Multi-1v1 arenas" in !gamemode (or !1v1), the map menu shows:
-  1. every .bsp in this folder
-  2. the installed maps from maplist.txt
-  3. other suitable maps on the server
-  4. maplist.txt maps that aren't installed, greyed out
+Standard maps (maplist.txt, Workshop ids in downloads.txt):
+    am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
 
-Standard maps for this mode (maplist.txt):
-    am_inferno_banana_dolnma, am_walterv2
+When an admin picks "Multi-1v1 arenas" in !gamemode (or !1v1), the map menu shows
+the maps in this folder, the installed maplist.txt maps, and any
+am_ maps elsewhere on the server (incl. maps\workshop).
 
-These are community maps - CS:GO doesn't come with them, so they show
-greyed out as (not installed) until you add them. Run download_community_maps.bat
-(in your csgo folder) to fetch them, or download the CS:GO versions
-(e.g. from GameBanana or varq.net) and drop the .bsp in this folder.
-The Steam Workshop now mostly has CS2 versions, which don't work in CS:GO.
-
-  - Copy the .bsp file (and its .nav file, if it has one) here.
-  - The file name is the map name: surf_mesa.bsp shows as surf_mesa.
-  - Add or remove names in maplist.txt to change the standard list.
-  - No restart needed - just open the menu again.
-  - If the map needs extra files (models, sounds, materials), put those in
-    the normal csgo\models, csgo\sound and csgo\materials folders, or use a
-    map whose .bsp has them packed in.
+To add a Workshop map: put a line in downloads.txt
+    <map name>  workshop:<Workshop id>
+and its name in maplist.txt, then run download_community_maps.bat.
+Use original CS:GO uploads - maps updated to CS2 (.vpk) can't load in CS:GO.
 
 You can delete this text file.

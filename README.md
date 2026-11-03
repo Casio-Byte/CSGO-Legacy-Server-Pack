@@ -133,8 +133,8 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Deathmatch / Arms Race / Demolition | the game's own rules |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
-| 1v1 match | ready-up 1v1, one player per side |
-| Multi-1v1 arenas | arena ladder on `am_` / `1v1_` maps |
+| 1v1 match | ready-up 1v1, one player per side, on Workshop aim maps only |
+| Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
 
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
@@ -181,6 +181,12 @@ Also included: SourceTV demo recording per match and round backups.
 
   `!duel <name>` skips step 4. Your opponent answers with `!accept` / `!decline`, and either player can `!forfeit`. In headshots-only duels, hits anywhere but the head do no damage.
 - **Arenas**: `!guns` `!sitout` `!rank`.
+  - Every arena on the map runs its own 1v1 each round.
+  - Players are **shuffled** into new random pairs every round. `!options` → "Arena pairing" switches to a ladder instead (win to move up).
+  - `!duel` works in arena mode: the two duelists get their own arena each round with their gun, rounds and headshots-only settings until someone wins or forfeits. Everyone else keeps shuffling, and up to 8 duels can run at once.
+- **Maps** (all downloaded straight from the Steam Workshop by `download_community_maps.bat`):
+  - 1v1 match: aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s, aim_dust_go
+  - Arenas: am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
 
 ### Admin
 - `/login <password>` gives full admin and remembers that PC. `/logout` undoes it.

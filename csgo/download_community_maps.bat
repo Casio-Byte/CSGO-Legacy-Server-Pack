@@ -1,9 +1,10 @@
 @echo off
 setlocal
-title Download community maps (Multi-1v1 arenas)
+title Download community maps (1v1 / Multi-1v1 arenas)
 
 rem ------------------------------------------------------------------
-rem  Downloads the Multi-1v1 arena maps listed in
+rem  Downloads the 1v1 and Multi-1v1 arena maps listed in
+rem      maps\modes\1v1\downloads.txt
 rem      maps\modes\arena\downloads.txt
 rem  from varq.net or the Steam Workshop and puts each .bsp into its
 rem  mode folder. Edit those downloads.txt files to change what it gets.
@@ -39,7 +40,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 
 $csgo  = $env:CSGO_DIR.TrimEnd('\')
 $temp  = Join-Path $csgo '_map_downloads'
-$modes = @('arena')
+$modes = @('arena', '1v1')
 $ua    = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 $curl  = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
 $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -118,11 +119,29 @@ Write-Host ''
 # Built-in standard maps (map name, varq.net page name) - used when a mode
 # folder has no downloads.txt yet, e.g. on a server set up with an older pack.
 $defaults = @{
-    'arena' = @(@('am_inferno_banana_dolnma', 'am_inferno_banana-1v1-arena'), @('am_walterv2', 'am_walterv2'))
+    # Multi-1v1 arena maps (Steam Workshop, original CS:GO uploads)
+    'arena' = @(
+        @('am_must2', 'workshop:279708083'), @('am_dust2', 'workshop:280544066'),
+        @('am_texture2', 'workshop:279705991'), @('am_aztec2', 'workshop:279177142'),
+        @('am_grass2', 'workshop:279697343'), @('am_warehouse2', 'workshop:279702034'),
+        @('am_water', 'workshop:256601025'), @('am_trainyard', 'workshop:298621139'),
+        @('am_skybound', 'workshop:303440740'), @('am_crashz_dust', 'workshop:302869851'),
+        @('am_inferno_banana_dolnma', 'workshop:515898943'))
+    # 1v1 match aim maps (Steam Workshop)
+    '1v1' = @(
+        @('aim_redline', 'workshop:125995702'), @('aim_map', 'workshop:122443683'),
+        @('aim_map_pro', 'workshop:701833987'), @('awp_lego_2', 'workshop:534427561'),
+        @('aim_pillars', 'workshop:405447392'), @('awp_india_csgo', 'workshop:391889933'),
+        @('aim_biove_texture', 'workshop:535541366'), @('aim_crashz_dust_1on1', 'workshop:305726849'),
+        @('aim_map_usp_s', 'workshop:270124159'), @('aim_dust_go', 'workshop:127178068'))
 }
-# The first pack's default lists - replaced automatically (edited lists are left alone).
+# Earlier packs' default lists - replaced automatically (edited lists are left alone).
 $oldDefaults = @{
-    'arena' = 'am_dust2 am_redline am_trainyard'
+    'arena' = @('am_dust2 am_redline am_trainyard', 'am_inferno_banana_dolnma am_walterv2')
+    '1v1'   = @('de_shortdust de_lake de_shortnuke gd_rialto')
+}
+$oldDownloads = @{
+    'arena' = @('am_inferno_banana_dolnma am_inferno_banana-1v1-arena am_walterv2')
 }
 
 function Update-Lists([string]$mode, [string]$folder) {
@@ -135,13 +154,23 @@ function Update-Lists([string]$mode, [string]$folder) {
     if (Test-Path $ml) {
         $current = Get-Content $ml | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('//') }
     }
-    if (-not (Test-Path $ml) -or (($current -join ' ') -eq $oldDefaults[$mode])) {
+    if (-not (Test-Path $ml) -or (@($oldDefaults[$mode]) -contains ($current -join ' '))) {
         $lines = @('// Standard maps - one map name per line.',
                    '// Installed maps are listed at the top of the !gamemode map menu;',
                    '// missing ones are shown greyed out as (not installed).',
                    '// Edit freely. Lines starting with // are ignored.') + ($maps | ForEach-Object { $_[0] })
         Set-Content -Path $ml -Value $lines
         Write-Host "  [list]   $mode\maplist.txt updated" -ForegroundColor DarkGray
+    }
+
+    # downloads.txt: replace an older pack's default list
+    if ((Test-Path $dl) -and $oldDownloads.ContainsKey($mode)) {
+        $cur = (Get-Content $dl | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('//') }) -join ' '
+        $cur = ($cur -replace '\s+', ' ')
+        if (@($oldDownloads[$mode]) -contains $cur) {
+            Remove-Item $dl -Force
+            Write-Host "  [list]   $mode\downloads.txt updated (Workshop maps)" -ForegroundColor DarkGray
+        }
     }
 
     # downloads.txt: create it if missing

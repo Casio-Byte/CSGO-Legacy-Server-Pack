@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.8.0-20261103"
+#define PLUGIN_VERSION "1.9.1-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -179,7 +179,8 @@ enum
 {
 	Round_Rifle = 0,
 	Round_Pistol,
-	Round_Awp
+	Round_Awp,
+	Round_Duel
 };
 
 char g_RoundTypeName[3][] = { "Rifle", "Pistol", "AWP" };
@@ -211,6 +212,20 @@ int  g_ArenasInUse = 0;
 bool g_ArenaRoundLive = false;
 int  g_ArenaSerial = 0;
 ArrayList g_ArenaWaiting;              // userids sitting this round out (odd one)
+// !duel inside arena mode: each duel pair gets its own arena every round.
+#define MAX_ARENA_DUELS 8
+int  g_ADuelA[MAX_ARENA_DUELS];
+int  g_ADuelB[MAX_ARENA_DUELS];
+int  g_ADuelWeapon[MAX_ARENA_DUELS];
+int  g_ADuelTarget[MAX_ARENA_DUELS];
+int  g_ADuelScoreA[MAX_ARENA_DUELS];
+int  g_ADuelScoreB[MAX_ARENA_DUELS];
+bool g_ADuelHs[MAX_ARENA_DUELS];
+bool g_ADuelOver[MAX_ARENA_DUELS];
+int  g_ADuelCount = 0;
+int  g_ArenaDuel[MAX_ARENAS];          // arena duel playing in this arena this round, -1 = normal
+int  g_ArenaDuelWep[MAX_ARENAS];       // gun for this round (random duels pick one per round)
+ConVar g_cvArenaShuffle;
 
 // Commands registered as sm_<name> so "!name" works too. ".name" works for everything in Dispatch().
 char g_RegisteredCmds[][] =
@@ -495,6 +510,7 @@ public void OnPluginStart()
 	g_cvOvertime      = CreateConVar("match_overtime", "-1", "Overtime: 1 = on, 0 = off, -1 = use live.cfg", _, true, -1.0, true, 1.0);
 	g_cvFriendlyFire  = CreateConVar("match_friendlyfire", "-1", "Friendly fire in matches: 1 = on, 0 = off, -1 = use live.cfg", _, true, -1.0, true, 1.0);
 	g_cvSeries        = CreateConVar("match_series_maps", "1", "Competitive 5v5: 1 = single map, 3 = best of 3 with a map veto (teams vote to ban/pick)", _, true, 1.0, true, 3.0);
+	g_cvArenaShuffle  = CreateConVar("match_arena_shuffle", "1", "Multi-1v1 arenas: 1 = shuffle players into random pairs every round, 0 = ladder (winners move up, losers down)", _, true, 0.0, true, 1.0);
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
@@ -1693,8 +1709,18 @@ bool CanStartDuel(int client)
 	}
 	if (g_State == State_Arena)
 	{
-		Reply(client, "The server is running 1v1 arenas — you're already dueling!");
-		return false;
+		// In arena mode a duel gets its own arena; everyone else keeps playing.
+		if (FindArenaDuel(GetClientUserId(client)) != -1)
+		{
+			Reply(client, "You're already in a duel. \x04!forfeit\x01 to end it.");
+			return false;
+		}
+		if (g_ADuelCount >= MAX_ARENA_DUELS)
+		{
+			Reply(client, "Too many duels running at once — try again when one finishes.");
+			return false;
+		}
+		return true;
 	}
 	return true;
 }
@@ -1903,6 +1929,11 @@ void SendChallenge(int from, int to, int weapon, int target, bool hs)
 		Reply(from, "Another challenge is waiting for an answer — try again in a moment.");
 		return;
 	}
+	if (g_State == State_Arena && FindArenaDuel(GetClientUserId(to)) != -1)
+	{
+		Reply(from, "%N is already in a duel.", to);
+		return;
+	}
 
 	g_ChalFrom = GetClientUserId(from);
 	g_ChalTo = GetClientUserId(to);
@@ -1988,6 +2019,12 @@ void Cmd_DuelAnswer(int client, bool accept)
 	int weapon = g_ChalWeapon, target = g_ChalTarget;
 	bool hs = g_ChalHs;
 	ClearChallenge();
+	if (g_State == State_Arena)
+	{
+		if (CanStartDuel(from))
+			StartArenaDuel(from, client, weapon, target, hs);
+		return;
+	}
 	StartDuel(from, client, weapon, target, hs);
 }
 
@@ -2353,6 +2390,11 @@ void UpdateDuelScore()
 
 void Cmd_EndDuel(int client)
 {
+	if (g_State == State_Arena)
+	{
+		ArenaDuelForfeit(client);
+		return;
+	}
 	if (g_State != State_Duel)
 	{
 		Reply(client, "No duel is running.");
@@ -2547,9 +2589,11 @@ char g_GmDefaultMaps[GM_COUNT][] =
 	"ar_baggage ar_shoots ar_monastery ar_pool_day",
 	"de_lake de_safehouse de_bank de_shortnuke",
 	"de_mirage de_inferno de_dust2 de_nuke de_ancient",
-	"de_shortdust de_lake de_shortnuke gd_rialto",
-	"am_inferno_banana_dolnma am_walterv2"
+	"aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars awp_india_csgo aim_biove_texture aim_crashz_dust_1on1 aim_map_usp_s aim_dust_go",
+	"am_must2 am_dust2 am_texture2 am_aztec2 am_grass2 am_warehouse2 am_water am_trainyard am_skybound am_crashz_dust am_inferno_banana_dolnma"
 };
+// Older packs' default lists, replaced automatically (edited lists are left alone).
+char g_GmOldMaps[GM_COUNT][] = { "", "", "", "", "", "", "", "de_shortdust de_lake de_shortnuke gd_rialto", "am_inferno_banana_dolnma am_walterv2" };
 char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "1v1", "arena" };
 
 char g_MapPool[][] =
@@ -2754,7 +2798,7 @@ void ShowModeMapMenu(int client)
 
 	char currentName[PLATFORM_MAX_PATH];
 	GetMapDisplayName(current, currentName, sizeof(currentName));
-	bool mapSpecific = (gm == GM_Arena);
+	bool mapSpecific = (gm == GM_Arena || gm == GM_1v1Match);
 	char folderPrefix[PLATFORM_MAX_PATH];
 	Format(folderPrefix, sizeof(folderPrefix), "modes/%s/", g_GmFolder[gm]);
 	if (!mapSpecific || HasMovePrefix(currentName, gm) || StrContains(current, folderPrefix, false) == 0)
@@ -2770,7 +2814,7 @@ void ShowModeMapMenu(int client)
 	int folderMaps = AddFolderMaps(menu, gm, seen);
 	folderMaps += AddStandardMaps(menu, gm, seen);
 
-	if (gm == GM_Wingman || gm == GM_1v1Match)
+	if (gm == GM_Wingman)
 	{
 		for (int i = 0; i < sizeof(g_WingmanMaps); i++)
 			AddMapItem(menu, g_WingmanMaps[i], seen);
@@ -2786,7 +2830,7 @@ void ShowModeMapMenu(int client)
 			AddMapItem(menu, g_DemolitionMaps[i], seen);
 	}
 
-	if (gm == GM_Arena)
+	if (gm == GM_Arena || gm == GM_1v1Match)
 	{
 		// Only maps made for the mode; normal maps make no sense here.
 		int found = folderMaps + AddPrefixedMaps(menu, gm, seen);
@@ -2901,6 +2945,8 @@ void ShowOptionsMenu(int client)
 
 	Format(line, sizeof(line), "Knife round: %s", g_KnifeEnabled ? "On" : "Off");
 	menu.AddItem("knife", line);
+	Format(line, sizeof(line), "Arena pairing: %s", g_cvArenaShuffle.BoolValue ? "Shuffle every round" : "Ladder (win = move up)");
+	menu.AddItem("arenapair", line);
 
 	int ready = g_cvReadyRequired.IntValue;
 	if (ready <= 0)
@@ -3001,6 +3047,8 @@ public int Handler_Options(Menu menu, MenuAction action, int client, int item)
 	}
 	else if (StrEqual(info, "vetotime"))
 		g_cvVetoTime.IntValue = NextInList(g_cvVetoTime.IntValue, vetoTimeList, sizeof(vetoTimeList));
+	else if (StrEqual(info, "arenapair"))
+		g_cvArenaShuffle.BoolValue = !g_cvArenaShuffle.BoolValue;
 	else if (StrEqual(info, "knife"))
 	{
 		g_KnifeEnabled = !g_KnifeEnabled;
@@ -3029,7 +3077,7 @@ public int Handler_Options(Menu menu, MenuAction action, int client, int item)
 		g_cvSideTime.IntValue = NextInList(g_cvSideTime.IntValue, sideList, sizeof(sideList));
 	else if (StrEqual(info, "reset"))
 	{
-		ConVar list[12];
+		ConVar list[13];
 		int n = GetOptionCvars(list);
 		for (int i = 0; i < n; i++)
 			list[i].RestoreDefault();
@@ -3044,7 +3092,7 @@ public int Handler_Options(Menu menu, MenuAction action, int client, int item)
 	return 0;
 }
 
-int GetOptionCvars(ConVar list[12])
+int GetOptionCvars(ConVar list[13])
 {
 	list[0] = g_cvKnifeDefault;
 	list[1] = g_cvReadyRequired;
@@ -3058,7 +3106,8 @@ int GetOptionCvars(ConVar list[12])
 	list[9] = g_cvSideTime;
 	list[10] = g_cvSeries;
 	list[11] = g_cvVetoTime;
-	return 12;
+	list[12] = g_cvArenaShuffle;
+	return 13;
 }
 
 void GetOptionsPath(char[] path, int maxlen)
@@ -3069,7 +3118,7 @@ void GetOptionsPath(char[] path, int maxlen)
 void SaveOptions()
 {
 	KeyValues kv = new KeyValues("options");
-	ConVar list[12];
+	ConVar list[13];
 	char name[64], value[64];
 	int n = GetOptionCvars(list);
 	for (int i = 0; i < n; i++)
@@ -3095,7 +3144,7 @@ void LoadSavedOptions()
 	KeyValues kv = new KeyValues("options");
 	if (kv.ImportFromFile(path))
 	{
-		ConVar list[12];
+		ConVar list[13];
 		char name[64], value[64];
 		int n = GetOptionCvars(list);
 		for (int i = 0; i < n; i++)
@@ -3119,6 +3168,11 @@ void GetMovePrefixes(int gm, char prefixes[4][16], int &count)
 	if (gm == GM_Arena)
 	{
 		strcopy(prefixes[count++], 16, "am_");
+	}
+	else if (gm == GM_1v1Match)
+	{
+		strcopy(prefixes[count++], 16, "aim_");
+		strcopy(prefixes[count++], 16, "awp_");
 		strcopy(prefixes[count++], 16, "1v1_");
 	}
 
@@ -3234,6 +3288,21 @@ void WriteDefaultMapList(int gm)
 {
 	char path[PLATFORM_MAX_PATH];
 	Format(path, sizeof(path), "maps/modes/%s/maplist.txt", g_GmFolder[gm]);
+	if (FileExists(path) && g_GmOldMaps[gm][0] != '\0')
+	{
+		// Replace an older pack's default list (left alone if it was edited).
+		ArrayList cur = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+		ReadModeMapList(gm, cur);
+		char joined[1024], name[PLATFORM_MAX_PATH];
+		for (int i = 0; i < cur.Length; i++)
+		{
+			cur.GetString(i, name, sizeof(name));
+			Format(joined, sizeof(joined), "%s%s%s", joined, i > 0 ? " " : "", name);
+		}
+		delete cur;
+		if (StrEqual(joined, g_GmOldMaps[gm], false))
+			DeleteFile(path);
+	}
 	if (FileExists(path))
 		return;
 
@@ -3676,6 +3745,7 @@ void EnterArena()
 	g_cvDuelActive.BoolValue = true; // loadout plugin: don't swap the weapons we hand out
 
 	FindArenas();
+	g_ADuelCount = 0;
 	g_ArenaRank.Clear();
 	g_ArenasInUse = 0;
 	g_ArenaRoundLive = false;
@@ -3701,7 +3771,13 @@ void EnterArena()
 public Action Timer_ArenaAnnounce(Handle timer)
 {
 	if (g_State == State_Arena)
-		Announce("\x04Multi-1v1 arenas\x01: %d arena(s) on this map. Win to move up, lose to move down. \x04!guns\x01 pick weapons, \x04!sitout\x01 take a break, \x04!rank\x01 your arena.", g_ArenaCount);
+	{
+		if (g_cvArenaShuffle.BoolValue)
+			Announce("\x04Multi-1v1 arenas\x01: %d arena(s) on this map. Players are shuffled into new 1v1s every round.", g_ArenaCount);
+		else
+			Announce("\x04Multi-1v1 arenas\x01: %d arena(s) on this map. Win to move up, lose to move down.", g_ArenaCount);
+		Announce("\x04!duel\x01 a player for your own arena (gun, rounds, headshots only). \x04!guns\x01 weapons, \x04!sitout\x01 break, \x04!rank\x01 your arena.");
+	}
 	return Plugin_Stop;
 }
 
@@ -3734,6 +3810,15 @@ void ArenaOnDisconnect(int client)
 
 	if (g_State != State_Arena)
 		return;
+
+	int d = FindArenaDuel(userid);
+	if (d != -1)
+	{
+		int other = GetClientOfUserId(g_ADuelA[d] == userid ? g_ADuelB[d] : g_ADuelA[d]);
+		if (other > 0)
+			Announce("%N left — \x04%N\x01 wins the duel.", client, other);
+		g_ADuelOver[d] = true;
+	}
 
 	// Leaving mid-fight hands the arena to the opponent.
 	for (int a = 0; a < g_ArenasInUse; a++)
@@ -3832,6 +3917,15 @@ void Cmd_ArenaRank(int client)
 		return;
 	}
 	int userid = GetClientUserId(client);
+	int d = FindArenaDuel(userid);
+	if (d != -1)
+	{
+		bool isA = (g_ADuelA[d] == userid);
+		int other = GetClientOfUserId(isA ? g_ADuelB[d] : g_ADuelA[d]);
+		if (other > 0)
+			Reply(client, "Duel vs %N: \x04%d - %d\x01 (first to %d%s).", other, isA ? g_ADuelScoreA[d] : g_ADuelScoreB[d],
+				isA ? g_ADuelScoreB[d] : g_ADuelScoreA[d], g_ADuelTarget[d], g_ADuelHs[d] ? ", headshots only" : "");
+	}
 	for (int a = 0; a < g_ArenasInUse; a++)
 	{
 		if (g_ArenaP[a][0] == userid || g_ArenaP[a][1] == userid)
@@ -3917,6 +4011,8 @@ public Action Timer_ArenaSetup(Handle timer, int serial)
 			g_ArenaRank.Push(GetClientUserId(i));
 	}
 
+	CompactArenaDuels();
+
 	ArrayList players = new ArrayList();
 	for (int i = 0; i < g_ArenaRank.Length; i++)
 	{
@@ -3925,7 +4021,30 @@ public Action Timer_ArenaSetup(Handle timer, int serial)
 			players.Push(g_ArenaRank.Get(i));
 	}
 
-	int arenas = players.Length / 2;
+	// Duel pairs get their own arena first.
+	int duelArenas = 0;
+	for (int d = 0; d < g_ADuelCount && duelArenas < g_ArenaCount; d++)
+	{
+		int ia = players.FindValue(g_ADuelA[d]);
+		int ib = players.FindValue(g_ADuelB[d]);
+		if (ia == -1 || ib == -1)
+			continue; // one of them is sitting out this round
+		if (ia > ib) { players.Erase(ia); players.Erase(ib); }
+		else         { players.Erase(ib); players.Erase(ia); }
+		g_ArenaP[duelArenas][0] = g_ADuelA[d];
+		g_ArenaP[duelArenas][1] = g_ADuelB[d];
+		g_ArenaDuel[duelArenas] = d;
+		duelArenas++;
+	}
+
+	// Everyone else: shuffled into random pairs, or in ladder order.
+	if (g_cvArenaShuffle.BoolValue)
+	{
+		for (int i = players.Length - 1; i > 0; i--)
+			players.SwapAt(i, GetRandomInt(0, i));
+	}
+
+	int arenas = duelArenas + players.Length / 2;
 	if (arenas > g_ArenaCount)
 		arenas = g_ArenaCount;
 	g_ArenasInUse = arenas;
@@ -3955,8 +4074,12 @@ public Action Timer_ArenaSetup(Handle timer, int serial)
 
 	for (int a = 0; a < arenas; a++)
 	{
-		g_ArenaP[a][0] = players.Get(a * 2);
-		g_ArenaP[a][1] = players.Get(a * 2 + 1);
+		if (a >= duelArenas)
+		{
+			g_ArenaP[a][0] = players.Get((a - duelArenas) * 2);
+			g_ArenaP[a][1] = players.Get((a - duelArenas) * 2 + 1);
+			g_ArenaDuel[a] = -1;
+		}
 		g_ArenaWinner[a] = 0;
 
 		int c1 = GetClientOfUserId(g_ArenaP[a][0]);
@@ -3970,13 +4093,23 @@ public Action Timer_ArenaSetup(Handle timer, int serial)
 		if (!IsPlayerAlive(c2))
 			CS_RespawnPlayer(c2);
 
+		if (g_ArenaDuel[a] != -1)
+		{
+			// Duel arena: the duel's own gun (random duels get a new one each round).
+			g_ArenaType[a] = Round_Duel;
+			int w = g_ADuelWeapon[g_ArenaDuel[a]];
+			if (StrEqual(g_DuelWepCls[w], "random"))
+				w = GetRandomInt(0, DUEL_WEAPONS - 3);   // any real gun (not random / knives)
+			g_ArenaDuelWep[a] = w;
+			continue;
+		}
 		// Round type: AWP only if both want it.
 		int types = (g_PrefAwp[c1] && g_PrefAwp[c2]) ? 3 : 2;
 		g_ArenaType[a] = GetRandomInt(0, types - 1);
 	}
 
 	// Leftovers (odd player out, or more players than arenas) watch this round.
-	for (int i = arenas * 2; i < players.Length; i++)
+	for (int i = (arenas - duelArenas) * 2; i < players.Length; i++)
 	{
 		g_ArenaWaiting.Push(players.Get(i));
 		int c = GetClientOfUserId(players.Get(i));
@@ -4014,14 +4147,26 @@ public Action Timer_ArenaPlace(Handle timer, int serial)
 		if (c1 > 0 && IsPlayerAlive(c1))
 		{
 			TeleportEntity(c1, g_ArenaTPos[a], g_ArenaTAng[a], zero);
-			ArmArenaPlayer(c1, g_ArenaType[a]);
+			if (g_ArenaDuel[a] != -1)
+				ArmArenaDuelPlayer(c1, g_ArenaDuelWep[a]);
+			else
+				ArmArenaPlayer(c1, g_ArenaType[a]);
 		}
 		if (c2 > 0 && IsPlayerAlive(c2))
 		{
 			TeleportEntity(c2, g_ArenaCTPos[a], g_ArenaCTAng[a], zero);
-			ArmArenaPlayer(c2, g_ArenaType[a]);
+			if (g_ArenaDuel[a] != -1)
+				ArmArenaDuelPlayer(c2, g_ArenaDuelWep[a]);
+			else
+				ArmArenaPlayer(c2, g_ArenaType[a]);
 		}
-		if (c1 > 0 && c2 > 0)
+		if (c1 > 0 && c2 > 0 && g_ArenaDuel[a] != -1)
+		{
+			int d = g_ArenaDuel[a];
+			PrintHintText(c1, "Duel vs %N — %s%s\n%d - %d (first to %d)", c2, g_DuelWepName[g_ArenaDuelWep[a]], g_ADuelHs[d] ? ", headshots only" : "", g_ADuelScoreA[d], g_ADuelScoreB[d], g_ADuelTarget[d]);
+			PrintHintText(c2, "Duel vs %N — %s%s\n%d - %d (first to %d)", c1, g_DuelWepName[g_ArenaDuelWep[a]], g_ADuelHs[d] ? ", headshots only" : "", g_ADuelScoreB[d], g_ADuelScoreA[d], g_ADuelTarget[d]);
+		}
+		else if (c1 > 0 && c2 > 0)
 		{
 			PrintHintText(c1, "Arena %d / %d — %s round\nvs %N", a + 1, g_ArenasInUse, g_RoundTypeName[g_ArenaType[a]], c2);
 			PrintHintText(c2, "Arena %d / %d — %s round\nvs %N", a + 1, g_ArenasInUse, g_RoundTypeName[g_ArenaType[a]], c1);
@@ -4133,26 +4278,64 @@ void ArenaEndRound()
 		return;
 	g_ArenaRoundLive = false;
 
-	int n = g_ArenasInUse;
-	int winners[MAX_ARENAS], losers[MAX_ARENAS];
-	for (int a = 0; a < n; a++)
+	// Duel arenas: score the round, finish duels that are won.
+	for (int a = 0; a < g_ArenasInUse; a++)
 	{
-		winners[a] = g_ArenaWinner[a];
-		losers[a] = (g_ArenaWinner[a] == g_ArenaP[a][0]) ? g_ArenaP[a][1] : g_ArenaP[a][0];
+		int d = g_ArenaDuel[a];
+		if (d == -1 || g_ADuelOver[d])
+			continue;
+		if (g_ArenaWinner[a] == g_ADuelA[d])
+			g_ADuelScoreA[d]++;
+		else
+			g_ADuelScoreB[d]++;
+		int ca = GetClientOfUserId(g_ADuelA[d]);
+		int cb = GetClientOfUserId(g_ADuelB[d]);
+		if (g_ADuelScoreA[d] >= g_ADuelTarget[d] || g_ADuelScoreB[d] >= g_ADuelTarget[d])
+		{
+			bool aWon = g_ADuelScoreA[d] > g_ADuelScoreB[d];
+			int w = aWon ? ca : cb, l = aWon ? cb : ca;
+			if (w > 0 && l > 0)
+				Announce("\x04%N\x01 won the duel against %N, \x04%d - %d\x01. Back to the shuffle!", w, l,
+					aWon ? g_ADuelScoreA[d] : g_ADuelScoreB[d], aWon ? g_ADuelScoreB[d] : g_ADuelScoreA[d]);
+			g_ADuelOver[d] = true;
+		}
+		else if (ca > 0 && cb > 0)
+		{
+			PrintToChat(ca, "%sDuel: %d - %d vs %N (first to %d)", PREFIX, g_ADuelScoreA[d], g_ADuelScoreB[d], cb, g_ADuelTarget[d]);
+			PrintToChat(cb, "%sDuel: %d - %d vs %N (first to %d)", PREFIX, g_ADuelScoreB[d], g_ADuelScoreA[d], ca, g_ADuelTarget[d]);
+		}
+	}
+
+	// Normal arenas only (duels aren't part of the ladder).
+	int n = 0;
+	int winners[MAX_ARENAS], losers[MAX_ARENAS], arenaNo[MAX_ARENAS];
+	for (int a = 0; a < g_ArenasInUse; a++)
+	{
+		if (g_ArenaDuel[a] != -1)
+			continue;
+		winners[n] = g_ArenaWinner[a];
+		losers[n] = (g_ArenaWinner[a] == g_ArenaP[a][0]) ? g_ArenaP[a][1] : g_ArenaP[a][0];
+		arenaNo[n] = a;
+		n++;
 	}
 
 	// Winners move up one arena, losers move down one:
 	// [W1, W2, L1, W3, L2, ..., Wn, L(n-1)] + waiting players + [Ln] + everyone else
+	// (with shuffle on the order doesn't matter - everyone is shuffled next round)
 	ArrayList next = new ArrayList();
-	next.Push(winners[0]);
-	for (int a = 1; a < n; a++)
+	if (n > 0)
 	{
-		next.Push(winners[a]);
-		next.Push(losers[a - 1]);
+		next.Push(winners[0]);
+		for (int a = 1; a < n; a++)
+		{
+			next.Push(winners[a]);
+			next.Push(losers[a - 1]);
+		}
 	}
 	for (int i = 0; i < g_ArenaWaiting.Length; i++)
 		next.Push(g_ArenaWaiting.Get(i));
-	next.Push(losers[n - 1]);
+	if (n > 0)
+		next.Push(losers[n - 1]);
 	for (int i = 0; i < g_ArenaRank.Length; i++)
 	{
 		int uid = g_ArenaRank.Get(i);
@@ -4163,14 +4346,15 @@ void ArenaEndRound()
 	delete g_ArenaRank;
 	g_ArenaRank = next;
 
+	bool ladder = !g_cvArenaShuffle.BoolValue;
 	for (int a = 0; a < n; a++)
 	{
 		int w = GetClientOfUserId(winners[a]);
 		int l = GetClientOfUserId(losers[a]);
 		if (w > 0)
-			PrintToChat(w, "%sYou won arena %d%s.", PREFIX, a + 1, a > 0 ? " — moving up" : " — staying on top");
+			PrintToChat(w, "%sYou won arena %d%s.", PREFIX, arenaNo[a] + 1, !ladder ? "" : (a > 0 ? " — moving up" : " — staying on top"));
 		if (l > 0)
-			PrintToChat(l, "%sYou lost arena %d%s.", PREFIX, a + 1, a < n - 1 ? " — moving down" : "");
+			PrintToChat(l, "%sYou lost arena %d%s.", PREFIX, arenaNo[a] + 1, (ladder && a < n - 1) ? " — moving down" : "");
 	}
 
 	CS_TerminateRound(3.0, CSRoundEnd_Draw, true);
@@ -5654,6 +5838,15 @@ void Cmd_EndSeries(int client)
 // Headshots-only duels: hits anywhere but the head do nothing.
 public Action Hook_DuelTraceAttack(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &ammotype, int hitbox, int hitgroup)
 {
+	if (g_State == State_Arena)
+	{
+		if (attacker < 1 || attacker > MaxClients || attacker == victim || hitgroup == 1 || !IsClientInGame(victim))
+			return Plugin_Continue;
+		int d = FindArenaDuel(GetClientUserId(victim));
+		if (d != -1 && g_ADuelHs[d] && FindArenaDuel(GetClientUserId(attacker)) == d)
+			return Plugin_Handled;
+		return Plugin_Continue;
+	}
 	if (g_State != State_Duel || !g_DuelHs)
 		return Plugin_Continue;
 	if (attacker < 1 || attacker > MaxClients || attacker == victim)
@@ -5661,4 +5854,121 @@ public Action Hook_DuelTraceAttack(int victim, int &attacker, int &inflictor, fl
 	if (hitgroup == 1) // head
 		return Plugin_Continue;
 	return Plugin_Handled;
+}
+
+
+/* ---------- !duel inside arena mode ---------- */
+
+int FindArenaDuel(int userid)
+{
+	for (int d = 0; d < g_ADuelCount; d++)
+	{
+		if (!g_ADuelOver[d] && (g_ADuelA[d] == userid || g_ADuelB[d] == userid))
+			return d;
+	}
+	return -1;
+}
+
+// Drop finished duels (only between rounds, so arena->duel links stay valid).
+void CompactArenaDuels()
+{
+	int w = 0;
+	for (int d = 0; d < g_ADuelCount; d++)
+	{
+		if (g_ADuelOver[d])
+			continue;
+		if (w != d)
+		{
+			g_ADuelA[w] = g_ADuelA[d];
+			g_ADuelB[w] = g_ADuelB[d];
+			g_ADuelWeapon[w] = g_ADuelWeapon[d];
+			g_ADuelTarget[w] = g_ADuelTarget[d];
+			g_ADuelScoreA[w] = g_ADuelScoreA[d];
+			g_ADuelScoreB[w] = g_ADuelScoreB[d];
+			g_ADuelHs[w] = g_ADuelHs[d];
+			g_ADuelOver[w] = false;
+		}
+		w++;
+	}
+	g_ADuelCount = w;
+}
+
+void StartArenaDuel(int a, int b, int weapon, int target, bool hs)
+{
+	if (g_ADuelCount >= MAX_ARENA_DUELS)
+		return;
+	int d = g_ADuelCount++;
+	g_ADuelA[d] = GetClientUserId(a);
+	g_ADuelB[d] = GetClientUserId(b);
+	g_ADuelWeapon[d] = weapon;
+	g_ADuelTarget[d] = target;
+	g_ADuelScoreA[d] = 0;
+	g_ADuelScoreB[d] = 0;
+	g_ADuelHs[d] = hs && !StrEqual(g_DuelWepCls[weapon], "knife");
+	g_ADuelOver[d] = false;
+	g_SitOut[a] = false;
+	g_SitOut[b] = false;
+	Announce("\x04%N vs %N\x01: %s, first to %d%s. They get their own arena from next round — everyone else keeps shuffling.",
+		a, b, g_DuelWepName[weapon], target, g_ADuelHs[d] ? ", headshots only" : "");
+	ArenaKickoffIfWaiting();
+}
+
+void ArmArenaDuelPlayer(int client, int weapon)
+{
+	int size = GetEntPropArraySize(client, Prop_Send, "m_hMyWeapons");
+	for (int i = 0; i < size; i++)
+	{
+		int wep = GetEntPropEnt(client, Prop_Send, "m_hMyWeapons", i);
+		if (wep != -1 && IsValidEntity(wep))
+		{
+			RemovePlayerItem(client, wep);
+			AcceptEntityInput(wep, "KillHierarchy");
+		}
+	}
+	SetEntityHealth(client, 100);
+	SetEntProp(client, Prop_Send, "m_ArmorValue", 100);
+	SetEntProp(client, Prop_Send, "m_bHasHelmet", 1);
+	GivePlayerItem(client, "weapon_knife");
+	if (StrEqual(g_DuelWepCls[weapon], "knife"))
+	{
+		FakeClientCommandEx(client, "use weapon_knife");
+		return;
+	}
+	GivePlayerItem(client, g_DuelWepCls[weapon]);
+	FakeClientCommandEx(client, "use %s", g_DuelWepCls[weapon]);
+}
+
+void ArenaDuelForfeit(int client)
+{
+	if (client > 0)
+	{
+		int d = FindArenaDuel(GetClientUserId(client));
+		if (d != -1)
+		{
+			int uid = GetClientUserId(client);
+			int other = GetClientOfUserId(g_ADuelA[d] == uid ? g_ADuelB[d] : g_ADuelA[d]);
+			if (other > 0)
+				Announce("%N forfeited — \x04%N\x01 wins the duel. Both are back in the shuffle next round.", client, other);
+			g_ADuelOver[d] = true;
+			return;
+		}
+	}
+	if (!IsAdmin(client))
+	{
+		Reply(client, "You're not in a duel.");
+		return;
+	}
+	int ended = 0;
+	for (int d = 0; d < g_ADuelCount; d++)
+	{
+		if (!g_ADuelOver[d])
+		{
+			g_ADuelOver[d] = true;
+			ended++;
+		}
+	}
+	if (ended > 0)
+		Announce("An admin ended the arena duels.");
+	else
+		Reply(client, "No duels are running.");
 }

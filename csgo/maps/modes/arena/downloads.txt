@@ -1,8 +1,16 @@
 // Used by download_community_maps.bat - one map per line:
 //     <map name>  <varq.net page name>
-// The page name is the last part of the map's varq.net address, e.g.
-//     https://varq.net/en/maps/counter-strike-go/kz-experiment  ->  kz-experiment
+// The page name is the last part of the map's varq.net address.
 // Leave it out if it's the same as the map name.
 // Only maps whose varq.net page has a download file will work.
-am_inferno_banana_dolnma  am_inferno_banana-1v1-arena
-am_walterv2
+am_must2  workshop:279708083
+am_dust2  workshop:280544066
+am_texture2  workshop:279705991
+am_aztec2  workshop:279177142
+am_grass2  workshop:279697343
+am_warehouse2  workshop:279702034
+am_water  workshop:256601025
+am_trainyard  workshop:298621139
+am_skybound  workshop:303440740
+am_crashz_dust  workshop:302869851
+am_inferno_banana_dolnma  workshop:515898943

@@ -207,8 +207,12 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Arms Race    ar_baggage ar_shoots ar_monastery ar_pool_day
   Demolition   de_lake de_safehouse de_bank de_shortnuke
   Practice     de_mirage de_inferno de_dust2 de_nuke de_ancient
-  1v1 match    de_shortdust de_lake de_shortnuke gd_rialto
-  Arenas       am_inferno_banana_dolnma am_walterv2          (community)
+  1v1 match    aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars
+               awp_india_csgo aim_biove_texture aim_crashz_dust_1on1
+               aim_map_usp_s aim_dust_go                     (Workshop)
+  Arenas       am_must2 am_dust2 am_texture2 am_aztec2 am_grass2
+               am_warehouse2 am_water am_trainyard am_skybound
+               am_crashz_dust am_inferno_banana_dolnma       (Workshop)
 
 The official maps are already installed with the server. The community
 maps (arenas) don't come with CS:GO and aren't included in
@@ -290,8 +294,8 @@ Game modes (admins)
                           Arms Race
                           Demolition
                           Practice          practice mode on the chosen map
-                          1v1 match         ready-up 1v1, one player per side
-                          Multi-1v1 arenas  arena ladder on am_ / 1v1_ maps
+                          1v1 match         ready-up 1v1 on aim maps
+                          Multi-1v1 arenas  many 1v1s at once on am_ maps
                           Match options     opens !options
                         The map menu also has "All maps on the server...".
                         The map menu lists, in order: the current map, the
@@ -388,8 +392,8 @@ Match - practice mode
                           !duel             anyone can challenge (below)
                           1v1 match         admins: switch the server to a
                                             ready-up 1v1 match
-                          Multi-1v1 arenas  admins: switch the server to the
-                                            arena ladder
+                          Multi-1v1 arenas  admins: switch the server to
+                                            multi-1v1 arenas
   !1v1 <name>           same as !duel <name>
 
 1v1 match (server mode, set with !1v1 or !gamemode)
@@ -397,23 +401,32 @@ Match - practice mode
   one player per side - extra players spectate. Needs 2 ready players.
   Settings: cfg\csgo_match\1v1.cfg (MR15, 1:30 rounds, 5 s freeze), run
   after live.cfg. Match length / overtime from !options still apply.
+  Maps: only 1v1 aim maps - the Workshop maps in maps\modes\1v1 (fetched
+  by download_community_maps.bat) and any aim_ / awp_ / 1v1_ maps on the
+  server. No normal de_ maps.
 
 Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
-  Everyone is paired off into the map's arenas each round. Win and you move
-  up an arena, lose and you move down; arena 1 is the top. With an odd
-  number of players (or more players than arenas) the extra player sits out
-  one round and goes in next. Each arena gets a random Rifle, Pistol or AWP
-  round (AWP only if both players allow it). If a fight lasts 60 seconds it
-  is decided on health.
-  Arena maps: am_ and 1v1_ maps on the server (scanned automatically). On a
-  normal map there is just one arena.
+  One map, many 1v1s at once: every arena on the map runs its own 1v1 each
+  round. Each round players are SHUFFLED into new random pairs (or, set in
+  !options -> "Arena pairing", a ladder: win and you move up an arena, lose
+  and you move down). With an odd number of players (or more players than
+  arenas) the extra player sits out one round and goes in next. Each arena
+  gets a random Rifle, Pistol or AWP round (AWP only if both players allow
+  it). If a fight lasts 60 seconds it is decided on health.
+  !duel works here too: the two duelists get their own arena every round
+  with their chosen gun, rounds and headshots-only setting, and are left
+  out of the shuffle until the duel is won (or someone types !forfeit).
+  Everyone else keeps shuffling. Up to 8 duels can run at once.
+  Arena maps: the Workshop am_ maps in maps\modes\arena (fetched by
+  download_community_maps.bat) and any am_ maps on the server. On a normal
+  map there is just one arena.
   !guns                 choose your rifle, pistol and whether you want AWP
                         rounds (saved for next time)
   !sitout               take a break / come back
-  !rank                 which arena you're in
+  !rank                 which arena you're in (and your duel score)
   Settings: cfg\csgo_match\arena.cfg
 
-1v1 duel - !duel (anyone, from warmup; also in the !1v1 menu)
+1v1 duel - !duel (anyone, from warmup or during arenas; also in !1v1)
   !duel                 set up a duel in 4 steps:
                           1. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,
                              Glock, P250, random each round, or knives

@@ -1,0 +1,15 @@
+// Used by download_community_maps.bat - one map per line:
+//     <map name>  <varq.net page name>
+// The page name is the last part of the map's varq.net address.
+// Leave it out if it's the same as the map name.
+// Only maps whose varq.net page has a download file will work.
+aim_redline  workshop:125995702
+aim_map  workshop:122443683
+aim_map_pro  workshop:701833987
+awp_lego_2  workshop:534427561
+aim_pillars  workshop:405447392
+awp_india_csgo  workshop:391889933
+aim_biove_texture  workshop:535541366
+aim_crashz_dust_1on1  workshop:305726849
+aim_map_usp_s  workshop:270124159
+aim_dust_go  workshop:127178068

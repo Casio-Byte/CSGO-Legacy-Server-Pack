@@ -1,28 +1,21 @@
 Maps for: 1v1 match
 ===================
 
-Put .bsp map files for this game mode in this folder:
+This mode only uses aim / awp 1v1 maps from the Steam Workshop.
+download_community_maps.bat downloads them straight from the Workshop
+(start_server.bat runs it for you) into this folder:
     csgo\maps\modes\1v1\
 
-When an admin picks "1v1 match" in !gamemode (or !1v1), the map menu shows:
-  1. every .bsp in this folder
-  2. the installed maps from maplist.txt
-  3. other suitable maps on the server
-  4. maplist.txt maps that aren't installed, greyed out
+Standard maps (maplist.txt, Workshop ids in downloads.txt):
+    aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s, aim_dust_go
 
-Standard maps for this mode (maplist.txt):
-    de_shortdust, de_lake, de_shortnuke, gd_rialto
+When an admin picks "1v1 match" in !gamemode (or !1v1), the map menu shows
+the maps in this folder, the installed maplist.txt maps, and any
+aim_ / awp_ / 1v1_ maps elsewhere on the server (incl. maps\workshop).
 
-These are official CS:GO maps, so they're already installed with the
-server - nothing to download. Any that are missing from your install
-show greyed out in the menu.
-
-  - Copy the .bsp file (and its .nav file, if it has one) here.
-  - The file name is the map name: surf_mesa.bsp shows as surf_mesa.
-  - Add or remove names in maplist.txt to change the standard list.
-  - No restart needed - just open the menu again.
-  - If the map needs extra files (models, sounds, materials), put those in
-    the normal csgo\models, csgo\sound and csgo\materials folders, or use a
-    map whose .bsp has them packed in.
+To add a Workshop map: put a line in downloads.txt
+    <map name>  workshop:<Workshop id>
+and its name in maplist.txt, then run download_community_maps.bat.
+Use original CS:GO uploads - maps updated to CS2 (.vpk) can't load in CS:GO.
 
 You can delete this text file.
