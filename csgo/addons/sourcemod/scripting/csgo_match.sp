@@ -2886,10 +2886,11 @@ public int Handler_GameMode(Menu menu, MenuAction action, int client, int item)
 void AddMapItem(Menu menu, const char[] map, StringMap seen)
 {
 	int dummy;
-	if (seen.GetValue(map, dummy) || !MapExists(map))
+	char path[PLATFORM_MAX_PATH];
+	if (seen.GetValue(map, dummy) || !ResolveMap(map, path, sizeof(path)))
 		return;
 	seen.SetValue(map, 1);
-	menu.AddItem(map, map);
+	menu.AddItem(path, map);
 }
 
 void ShowModeMapMenu(int client)
@@ -3003,11 +3004,13 @@ public Action Timer_SwitchMode(Handle timer)
 	g_SwitchMode = -1;
 	if (gm < 0 || gm >= GM_COUNT)
 		return Plugin_Stop;
-	if (!MapExists(g_SwitchMap))
+	char target[PLATFORM_MAX_PATH];
+	if (!ResolveMap(g_SwitchMap, target, sizeof(target)))
 	{
 		Announce("\x02Can't switch: map %s isn't installed on the server.\x01 Nothing was changed.", g_SwitchMap);
 		return Plugin_Stop;
 	}
+	strcopy(g_SwitchMap, sizeof(g_SwitchMap), target);
 
 	g_PracticeNext = (gm == GM_Practice);
 	int newMove = (gm >= GM_KZ && gm <= GM_Surf) ? (MOVE_KZ + gm - GM_KZ) : MOVE_NONE;
@@ -3453,18 +3456,52 @@ void ReadModeMapList(int gm, ArrayList list)
 // IsMapValid() on CS:GO also accepts fuzzy matches (training_aim_csgo2 can
 // resolve to de_train), so only accept a real match: an exact map, or a
 // resolved name whose map name is the same (e.g. a workshop path).
-bool MapExists(const char[] map)
+// Finds the exact map and gives the path changelevel needs. A bare name of a
+// workshop map ("training_aim_csgo2") becomes "workshop/<id>/training_aim_csgo2",
+// because changelevel with only the bare name lets the game guess (de_train).
+bool ResolveMap(const char[] map, char[] out, int maxlen)
 {
 	char found[PLATFORM_MAX_PATH];
 	FindMapResult r = FindMap(map, found, sizeof(found));
 	if (r == FindMap_Found)
+	{
+		strcopy(out, maxlen, map);
 		return true;
+	}
 	if (r == FindMap_FuzzyMatch || r == FindMap_NonCanonical)
 	{
 		char a[PLATFORM_MAX_PATH], b[PLATFORM_MAX_PATH];
 		MapShortName(map, a, sizeof(a));
 		MapShortName(found, b, sizeof(b));
-		return StrEqual(a, b, false);
+		if (StrEqual(a, b, false) && !StrEqual(map, found, false) && StrContains(found, "/") != -1)
+		{
+			strcopy(out, maxlen, found);
+			return true;
+		}
+	}
+
+	// Look in maps/workshop/<id>/ ourselves for a bare map name.
+	if (StrContains(map, "/") == -1)
+	{
+		char id[64], file[PLATFORM_MAX_PATH];
+		FileType type;
+		DirectoryListing ws = OpenDirectory("maps/workshop", true);
+		if (ws != null)
+		{
+			while (ws.GetNext(id, sizeof(id), type))
+			{
+				if (type != FileType_Directory || id[0] == '.')
+					continue;
+				Format(file, sizeof(file), "maps/workshop/%s/%s.bsp", id, map);
+				if (FileExists(file, true))
+				{
+					Format(out, maxlen, "workshop/%s/%s", id, map);
+					delete ws;
+					return true;
+				}
+			}
+			delete ws;
+		}
 	}
 	return false;
 }
@@ -3474,17 +3511,9 @@ bool MapInstalled(int gm, const char[] name, char[] mapPath, int maxlen)
 	// In the mode's folder, or anywhere the game can find it (maps\, workshop).
 	char inFolder[PLATFORM_MAX_PATH];
 	Format(inFolder, sizeof(inFolder), "modes/%s/%s", g_GmFolder[gm], name);
-	if (MapExists(inFolder))
-	{
-		strcopy(mapPath, maxlen, inFolder);
+	if (ResolveMap(inFolder, mapPath, maxlen))
 		return true;
-	}
-	if (MapExists(name))
-	{
-		strcopy(mapPath, maxlen, name);
-		return true;
-	}
-	return false;
+	return ResolveMap(name, mapPath, maxlen);
 }
 
 // Standard maps (maplist.txt) that are installed. Returns how many were added.
@@ -5121,12 +5150,13 @@ public Action Timer_ChangeMap(Handle timer)
 {
 	if (g_SwitchMap[0] == '\0')
 		return Plugin_Stop;
-	if (!MapExists(g_SwitchMap))
+	char target[PLATFORM_MAX_PATH];
+	if (!ResolveMap(g_SwitchMap, target, sizeof(target)))
 	{
 		Announce("\x02Can't change map: %s isn't installed on the server.", g_SwitchMap);
 		return Plugin_Stop;
 	}
-	ServerCommand("changelevel %s", g_SwitchMap);
+	ServerCommand("changelevel %s", target);
 	return Plugin_Stop;
 }
 
