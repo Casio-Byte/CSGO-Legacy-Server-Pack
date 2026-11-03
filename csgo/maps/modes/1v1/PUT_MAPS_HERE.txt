@@ -1,4 +1,4 @@
-Maps for: 1v1 match
+Maps for: 1v1 duels
 ===================
 
 This mode only uses aim / awp 1v1 maps from the Steam Workshop.
@@ -9,7 +9,7 @@ download_community_maps.bat downloads them straight from the Workshop
 Standard maps (maplist.txt, Workshop ids in downloads.txt):
     aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s, aim_dust_go
 
-When an admin picks "1v1 match" in !gamemode (or !1v1), the map menu shows
+When an admin picks "1v1 duels" in !gamemode (or !1v1), the map menu shows
 the maps in this folder, the installed maplist.txt maps, and any
 aim_ / awp_ / 1v1_ maps elsewhere on the server (incl. maps\workshop).
 

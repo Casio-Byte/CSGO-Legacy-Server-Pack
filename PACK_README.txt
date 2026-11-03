@@ -191,7 +191,7 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\armsrace\       Arms Race
   csgo\maps\modes\demolition\     Demolition
   csgo\maps\modes\practice\       Practice
-  csgo\maps\modes\1v1\            1v1 match
+  csgo\maps\modes\1v1\            1v1 duels
   csgo\maps\modes\arena\          Multi-1v1 arenas
 
 Each folder also has a maplist.txt of standard maps for that mode. Installed
@@ -207,7 +207,7 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Arms Race    ar_baggage ar_shoots ar_monastery ar_pool_day
   Demolition   de_lake de_safehouse de_bank de_shortnuke
   Practice     de_mirage de_inferno de_dust2 de_nuke de_ancient
-  1v1 match    aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars
+  1v1 duels    aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars
                awp_india_csgo aim_biove_texture aim_crashz_dust_1on1
                aim_map_usp_s aim_dust_go                     (Workshop)
   Arenas       am_must2 am_dust2 am_texture2 am_aztec2 am_grass2
@@ -273,7 +273,7 @@ WHAT GETS CREATED AUTOMATICALLY
 -------------------------------
   cfg\csgo_match\warmup.cfg / knife.cfg / live.cfg / prac.cfg / duel.cfg
   cfg\csgo_match\wingman.cfg                                    (2v2 settings)
-  cfg\csgo_match\1v1.cfg / arena.cfg                            (1v1 modes)
+  cfg\csgo_match\arena.cfg                                    (1v1 arenas)
   cfg\sourcemod\csgo_match.cfg                                 (match settings)
   addons\sourcemod\data\csgo_loadout\<steamid>.cfg             (one per player)
   addons\sourcemod\data\csgo_match_options.txt                 (!options choices)
@@ -287,10 +287,9 @@ with "." (e.g. .ready). From the console, use sm_<command>.
 
 Commands only work in the modes they belong to (anything else says so):
   !ready, !pause, !stop, side pick, !start/!restart etc.
-                        Competitive 5v5, Wingman 2v2, 1v1 match (and
-                        Practice)
+                        Competitive 5v5, Wingman 2v2 (and Practice)
   !bo3 / !bo1 / !series Competitive 5v5 only
-  !duel and its answers 1v1 match and Multi-1v1 arenas only
+  !duel and its answers 1v1 duels and Multi-1v1 arenas only
   !guns / !sitout / !rank  Multi-1v1 arenas only
   Skins (!ws etc.), !gamemode, !1v1, !map, !options, !help, !status work
   everywhere. !help lists just the commands for the current mode.
@@ -305,7 +304,7 @@ Game modes (admins)
                           Arms Race
                           Demolition
                           Practice          practice mode on the chosen map
-                          1v1 match         ready-up 1v1 on aim maps
+                          1v1 duels         !duel lobby on aim maps
                           Multi-1v1 arenas  many 1v1s at once on am_ maps
                           Match options     opens !options
                         The map menu also has "All maps on the server...".
@@ -402,17 +401,18 @@ Match - practice mode
 1v1 MODES
   !1v1                  menu with every 1v1 mode:
                           !duel             anyone can challenge (below)
-                          1v1 match         admins: switch the server to a
-                                            ready-up 1v1 match
+                          1v1 duels         admins: switch the server to
+                                            the 1v1 duel lobby
                           Multi-1v1 arenas  admins: switch the server to
                                             multi-1v1 arenas
   !1v1 <name>           same as !duel <name>
 
-1v1 match (server mode, set with !1v1 or !gamemode)
-  Normal ready-up match flow (!ready, knife round, pauses, !stop...) with
-  one player per side - extra players spectate. Needs 2 ready players.
-  Settings: cfg\csgo_match\1v1.cfg (MR15, 1:30 rounds, 5 s freeze), run
-  after live.cfg. Match length / overtime from !options still apply.
+1v1 duels (server mode, set with !1v1 or !gamemode)
+  A lobby on the aim maps: endless warmup (respawn, buy anywhere) where
+  everyone warms up and challenges each other with !duel. No ready-up,
+  knife round, pauses or match commands. While a duel runs, the other
+  players spectate; afterwards everyone is back in the lobby.
+  For lots of 1v1s at the same time, use Multi-1v1 arenas instead.
   Maps: only 1v1 aim maps - the Workshop maps in maps\modes\1v1 (fetched
   by download_community_maps.bat) and any aim_ / awp_ / 1v1_ maps on the
   server. No normal de_ maps.
@@ -438,7 +438,7 @@ Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
   !rank                 which arena you're in (and your duel score)
   Settings: cfg\csgo_match\arena.cfg
 
-1v1 duel - !duel (1v1 match warmup or during arenas; also in !1v1)
+1v1 duel - !duel (1v1 duels mode or arenas; also in !1v1)
   !duel                 set up a duel in 4 steps:
                           1. opponent: list of everyone on the server
                           2. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,

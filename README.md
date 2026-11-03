@@ -128,9 +128,9 @@ Commands only work in the modes they belong to; anywhere else they say so. `!hel
 
 | Commands | Work in |
 |---|---|
-| `!ready` `!pause` `!stop`, side pick, `!start` `!restart` etc. | Competitive 5v5, Wingman 2v2, 1v1 match (and Practice) |
+| `!ready` `!pause` `!stop`, side pick, `!start` `!restart` etc. | Competitive 5v5, Wingman 2v2 (and Practice) |
 | `!bo3` `!bo1` `!series` `!endseries` | Competitive 5v5 |
-| `!duel` `!accept` `!decline` `!forfeit` | 1v1 match, Multi-1v1 arenas |
+| `!duel` `!accept` `!decline` `!forfeit` | 1v1 duels, Multi-1v1 arenas |
 | `!guns` `!sitout` `!rank` | Multi-1v1 arenas |
 | skins, `!gamemode`, `!1v1`, `!map`, `!options`, `!help`, `!status` | everywhere |
 
@@ -143,7 +143,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Deathmatch / Arms Race / Demolition | the game's own rules |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
-| 1v1 match | ready-up 1v1 (knife round, pauses as in 5v5), one player per side, on Workshop aim maps only |
+| 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
 
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
@@ -196,7 +196,7 @@ Also included: SourceTV demo recording per match and round backups.
   - Players are **shuffled** into new random pairs every round. `!options` → "Arena pairing" switches to a ladder instead (win to move up).
   - `!duel` works in arena mode: the two duelists get their own arena each round with their gun, rounds and headshots-only settings until someone wins or forfeits. Everyone else keeps shuffling, and up to 8 duels can run at once.
 - **Maps** (all downloaded straight from the Steam Workshop by `download_community_maps.bat`):
-  - 1v1 match: aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s, aim_dust_go
+  - 1v1 duels: aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s, aim_dust_go
   - Arenas: am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
 
 ### Admin

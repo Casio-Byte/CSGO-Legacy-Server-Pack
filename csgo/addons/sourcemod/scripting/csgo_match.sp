@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.10.0-20261103"
+#define PLUGIN_VERSION "1.11.0-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -151,8 +151,8 @@ ConVar g_cvFriendlyFire;
 
 bool g_PracticeNext = false;   // set by !gamemode / !prac so practice survives a map change
 
-/* 1v1 match / Multi-1v1 arenas */
-bool  g_OneVOneNext = false;     // 1v1 ready-up match (survives map changes)
+/* 1v1 duels / Multi-1v1 arenas */
+bool  g_OneVOneNext = false;     // 1v1 duel lobby (survives map changes)
 bool  g_ArenaNext = false;       // Multi-1v1 arenas (survives map changes)
 
 /* !map */
@@ -397,22 +397,6 @@ char g_CfgWingman[][] =
 
 
 
-
-char g_Cfg1v1[][] =
-{
-	"// 1v1 match — runs after live.cfg when the server is in 1v1 match mode.",
-	"mp_maxrounds 30",
-	"mp_roundtime 1.5",
-	"mp_roundtime_defuse 1.5",
-	"mp_freezetime 5",
-	"mp_buytime 10",
-	"mp_c4timer 35",
-	"mp_halftime 1",
-	"mp_overtime_enable 1",
-	"mp_overtime_maxrounds 6",
-	"mp_team_timeout_max 1",
-	"mp_friendlyfire 0"
-};
 
 char g_CfgArena[][] =
 {
@@ -703,14 +687,14 @@ bool CommandAllowedHere(int client, const char[] cmd)
 	char mode[40];
 	GetModeName(mode, sizeof(mode));
 
-	// Ready-up match flow: Competitive, Wingman, 1v1 match.
+	// Ready-up match flow: Competitive, Wingman (and Practice).
 	if (IsAny(cmd, "ready r rdy unready ur notready pause tech unpause tac stay switch swap t ct stop")
 		|| IsAny(cmd, "start forcestart restart endmatch reset knife knifetoggle forceready forceunpause fup")
 		|| IsAny(cmd, "team1 team2 restore readyrequired prac"))
 	{
 		if (!IsMatchMode() && g_State != State_Practice)
 		{
-			Reply(client, "That's a match command — it works in Competitive 5v5, Wingman and 1v1 match. Now: \x04%s\x01.", mode);
+			Reply(client, "That's a match command — it works in Competitive 5v5 and Wingman 2v2. Now: \x04%s\x01.", mode);
 			return false;
 		}
 		return true;
@@ -725,12 +709,12 @@ bool CommandAllowedHere(int client, const char[] cmd)
 		}
 		return true;
 	}
-	// Duels: 1v1 match and Multi-1v1 arenas only.
+	// Duels: 1v1 duels and Multi-1v1 arenas only.
 	if (IsAny(cmd, "duel accept decline forfeit ff endduel"))
 	{
 		if (!DuelModeActive())
 		{
-			Reply(client, "!duel only works in the 1v1 modes (1v1 match or Multi-1v1 arenas). Now: \x04%s\x01. Admins can switch with \x04!1v1\x01.", mode);
+			Reply(client, "!duel only works in the 1v1 modes (1v1 duels or Multi-1v1 arenas). Now: \x04%s\x01. Admins can switch with \x04!1v1\x01.", mode);
 			return false;
 		}
 		return true;
@@ -893,8 +877,6 @@ void StartLive()
 	ServerCommand("exec csgo_match/live.cfg");
 	if (IsWingman())
 		ServerCommand("exec csgo_match/wingman.cfg");
-	if (g_OneVOneNext)
-		ServerCommand("exec csgo_match/1v1.cfg");
 	if (g_cvMaxRounds.IntValue > 0)
 		ServerCommand("mp_maxrounds %d", g_cvMaxRounds.IntValue);
 	if (g_cvOvertime.IntValue >= 0)
@@ -965,8 +947,6 @@ int CountPlayers(int &ready)
 
 int RequiredReady(int total)
 {
-	if (g_OneVOneNext)
-		return 2;
 	int r = g_cvReadyRequired.IntValue;
 	if (r <= 0)
 		return total;
@@ -2538,6 +2518,12 @@ void EndDuel(const char[] reason)
 		return;
 	if (reason[0] != '\0')
 		Announce("%s", reason);
+	if (g_OneVOneNext)
+	{
+		EnterDuelLobby();
+		Announce("Back to the 1v1 lobby. Spectators can join a team again.");
+		return;
+	}
 	if (IsMatchMode())
 	{
 		StartWarmup(); // runs DuelCleanup()
@@ -2622,8 +2608,6 @@ public Action Listener_JoinTeam(int client, const char[] command, int argc)
 		return Plugin_Continue;
 	if (g_State == State_Arena)
 		return ArenaJoinTeam(client);
-	if (g_OneVOneNext && g_State != State_Duel)
-		return OneVOneJoinTeam(client);
 	if (g_State != State_Duel)
 		return SeriesJoinTeam(client);
 
@@ -2686,7 +2670,7 @@ enum
 	GM_COUNT
 };
 
-char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "1v1 match", "Multi-1v1 arenas" };
+char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "1v1 duels", "Multi-1v1 arenas" };
 int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0 };
 int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 1, 0 };
 // Each mode has its own map folder: csgo/maps/modes/<folder>/
@@ -2761,7 +2745,7 @@ bool IsWingman()
 // Modes where the ready-up / knife / live match flow runs.
 bool IsMatchMode()
 {
-	if (g_ArenaNext)
+	if (g_ArenaNext || g_OneVOneNext)
 		return false;
 	if (GetCvarInt("game_type") != 0)
 		return false;
@@ -2780,6 +2764,11 @@ void ApplyModeOnMapStart()
 	if (g_ArenaNext)
 	{
 		EnterArena();
+		return;
+	}
+	if (g_OneVOneNext)
+	{
+		EnterDuelLobby();
 		return;
 	}
 	if (IsMatchMode())
@@ -2859,8 +2848,10 @@ void ShowGameModeMenu(int client)
 			Format(line, sizeof(line), "%s [current]", g_GmName[i]);
 		else
 			strcopy(line, sizeof(line), g_GmName[i]);
-		if (i == GM_Competitive || i == GM_Wingman || i == GM_1v1Match)
+		if (i == GM_Competitive || i == GM_Wingman)
 			StrCat(line, sizeof(line), " (ready-up match)");
+		else if (i == GM_1v1Match)
+			StrCat(line, sizeof(line), " (!duel lobby)");
 		menu.AddItem(info, line);
 	}
 	menu.AddItem("options", "Match options...");
@@ -3615,8 +3606,8 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 	if (DuelModeActive())
 		menu.AddItem("duel", "!duel — pick an opponent, then gun, rounds, headshots only");
 	else
-		menu.AddItem("duel", "!duel (only in 1v1 match / arenas)", ITEMDRAW_DISABLED);
-	menu.AddItem("match", admin ? "1v1 match — ready-up MR15, one per side" : "1v1 match (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+		menu.AddItem("duel", "!duel (only in 1v1 duels / arenas)", ITEMDRAW_DISABLED);
+	menu.AddItem("match", admin ? "1v1 duels — lobby on aim maps, everyone can !duel" : "1v1 duels (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	menu.AddItem("arena", admin ? "Multi-1v1 arenas — ladder on am_ maps" : "Multi-1v1 arenas (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	if (g_State == State_Arena)
 		menu.AddItem("guns", "Arena guns (!guns)");
@@ -3661,56 +3652,9 @@ void ResetArenaCvars()
 }
 
 /* ------------------------------------------------------------------ */
-/*  1v1 match: one human per side                                     */
+/*  1v1 duels mode                                                    */
 /* ------------------------------------------------------------------ */
 
-int CountHumansOnTeam(int team, int except)
-{
-	int n = 0;
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (i != except && IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == team)
-			n++;
-	}
-	return n;
-}
-
-Action OneVOneJoinTeam(int client)
-{
-	char arg[8];
-	GetCmdArg(1, arg, sizeof(arg));
-	int team = StringToInt(arg);
-
-	if (team == CS_TEAM_T || team == CS_TEAM_CT)
-	{
-		if (CountHumansOnTeam(team, client) >= 1)
-		{
-			int other = (team == CS_TEAM_T) ? CS_TEAM_CT : CS_TEAM_T;
-			if (CountHumansOnTeam(other, client) == 0 && GetClientTeam(client) != other)
-			{
-				PrintToChat(client, "%s1v1 match: that side is taken — putting you on the other side.", PREFIX);
-				ChangeClientTeam(client, other);
-			}
-			else
-			{
-				PrintToChat(client, "%s1v1 match: both sides are taken — you can spectate.", PREFIX);
-			}
-			return Plugin_Handled;
-		}
-	}
-	else if (team == 0)
-	{
-		// Auto-select: pick the empty side, or spectate.
-		if (CountHumansOnTeam(CS_TEAM_T, client) == 0)
-			ChangeClientTeam(client, CS_TEAM_T);
-		else if (CountHumansOnTeam(CS_TEAM_CT, client) == 0)
-			ChangeClientTeam(client, CS_TEAM_CT);
-		else
-			ChangeClientTeam(client, CS_TEAM_SPECTATOR);
-		return Plugin_Handled;
-	}
-	return Plugin_Continue;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Multi-1v1 arenas                                                  */
@@ -5149,7 +5093,6 @@ void WriteDefaultConfigs()
 	WriteDefaultCfg("prac.cfg", g_CfgPrac, sizeof(g_CfgPrac));
 	WriteDefaultCfg("duel.cfg", g_CfgDuel, sizeof(g_CfgDuel));
 	WriteDefaultCfg("wingman.cfg", g_CfgWingman, sizeof(g_CfgWingman));
-	WriteDefaultCfg("1v1.cfg", g_Cfg1v1, sizeof(g_Cfg1v1));
 	WriteDefaultCfg("arena.cfg", g_CfgArena, sizeof(g_CfgArena));
 }
 
@@ -6086,4 +6029,30 @@ void ArenaDuelForfeit(int client)
 		Announce("An admin ended the arena duels.");
 	else
 		Reply(client, "No duels are running.");
+}
+
+
+/* ---------- 1v1 duels mode: a lobby where everyone can !duel ---------- */
+
+// No ready-up, knife round or match: endless warmup on the aim maps where
+// players warm up and challenge each other with !duel.
+void EnterDuelLobby()
+{
+	DuelCleanup();
+	ResetMatch();
+	StopDemo();
+	g_State = State_None;
+	ServerCommand("exec csgo_match/warmup.cfg");
+	ServerCommand("mp_timelimit 0");
+	ServerCommand("mp_endmatch_votenextmap 0");
+	ServerCommand("mp_unpause_match");
+	ServerCommand("mp_warmup_start");
+	CreateTimer(5.0, Timer_DuelLobbyAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_DuelLobbyAnnounce(Handle timer)
+{
+	if (g_OneVOneNext && g_State == State_None)
+		Announce("\x04 1v1 duels\x01: warm up, then type \x04!duel\x01 to challenge someone (pick a player, gun, rounds, headshots only).");
+	return Plugin_Stop;
 }
