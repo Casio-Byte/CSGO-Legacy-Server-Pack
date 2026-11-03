@@ -1,11 +1,10 @@
 @echo off
 setlocal
-title Download community maps (Arenas / Aim Botz)
+title Download community maps (Multi-1v1 arenas)
 
 rem ------------------------------------------------------------------
-rem  Downloads the Multi-1v1 arena and Aim Botz maps listed in
+rem  Downloads the Multi-1v1 arena maps listed in
 rem      maps\modes\arena\downloads.txt
-rem      maps\modes\aimbotz\downloads.txt
 rem  from varq.net or the Steam Workshop and puts each .bsp into its
 rem  mode folder. Edit those downloads.txt files to change what it gets.
 rem
@@ -40,7 +39,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 
 $csgo  = $env:CSGO_DIR.TrimEnd('\')
 $temp  = Join-Path $csgo '_map_downloads'
-$modes = @('arena', 'aimbotz')
+$modes = @('arena')
 $ua    = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 $curl  = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
 $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -120,7 +119,6 @@ Write-Host ''
 # folder has no downloads.txt yet, e.g. on a server set up with an older pack.
 $defaults = @{
     'arena' = @(@('am_inferno_banana_dolnma', 'am_inferno_banana-1v1-arena'), @('am_walterv2', 'am_walterv2'))
-    'aimbotz' = @(,@('training_aim_csgo2', 'workshop:243702660'))
 }
 # The first pack's default lists - replaced automatically (edited lists are left alone).
 $oldDefaults = @{
@@ -144,16 +142,6 @@ function Update-Lists([string]$mode, [string]$folder) {
                    '// Edit freely. Lines starting with // are ignored.') + ($maps | ForEach-Object { $_[0] })
         Set-Content -Path $ml -Value $lines
         Write-Host "  [list]   $mode\maplist.txt updated" -ForegroundColor DarkGray
-    }
-
-    # downloads.txt: upgrade entries from older packs
-    if (Test-Path $dl) {
-        $old = Get-Content $dl
-        $new = $old | ForEach-Object { if ($_ -match '^\s*training_aim_csgo2\s+training-aim-csgo2\s*$') { 'training_aim_csgo2  workshop:243702660' } else { $_ } }
-        if (($old -join "`n") -ne ($new -join "`n")) {
-            Set-Content -Path $dl -Value $new
-            Write-Host "  [list]   $mode\downloads.txt updated" -ForegroundColor DarkGray
-        }
     }
 
     # downloads.txt: create it if missing

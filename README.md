@@ -3,7 +3,7 @@
 A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on Windows** into a full community/match server. It includes:
 
 - **Metamod and SourceMod**, preconfigured.
-- **CS:GO Match**, a match system: ready-up, knife round, pauses, best-of-3 with map veto, every game mode, Aim Botz training and all 1v1 modes.
+- **CS:GO Match**, a match system: ready-up, knife round, pauses, best-of-3 with map veto, every game mode and all 1v1 modes.
 - **CS:GO Loadout**, a skin system: skins, stickers, knives, gloves, agents, patches and default-weapon picks, saved per player.
 - **Helpers**: a first-run setup wizard, a crash-restarting launcher, FastDL map downloads, a community map downloader, and the internet-play fixes from [FNScence/CSGO-Legacy-Server](https://github.com/FNScence/CSGO-Legacy-Server).
 
@@ -116,7 +116,7 @@ Close the server before running it. It lists everything and asks first. By defau
 
 ## Community maps: `download_community_maps.bat`
 
-This downloads the arena and Aim Botz maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
+This downloads the arena maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
 
 ---
 
@@ -135,7 +135,6 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
 | 1v1 match | ready-up 1v1, one player per side |
 | Multi-1v1 arenas | arena ladder on `am_` / `1v1_` maps |
-| Aim Botz (solo training) | `training_aim_csgo2`: the map's buttons control the bots. Infinite ammo, buy anywhere, no round end. `!aimbotz` jumps straight to it. |
 
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
@@ -171,13 +170,6 @@ Also included: SourceTV demo recording per match and round backups.
 - `!stop` on/off
 - demo recording
 - side-pick time
-
-### Aim Botz: solo aim training
-- `!aimbotz` (`!aim`, `!training`) or `!gamemode` → **Aim Botz (solo training)**. It opens the map picker for `maps/modes/aimbotz/`.
-- The map's own buttons add bots and set them up. The mode adds infinite ammo, buy anywhere, $60k, instant respawn and no round end.
-- It sets `sv_allow_point_servercommand always` so the map's buttons can run bot commands on a dedicated server. That setting is reverted when you switch mode.
-- Settings: `cfg/csgo_match/aimbotz.cfg`.
-- Map: `download_community_maps.bat` downloads it straight from the Steam Workshop (id 243702660) through Steam's public file API. If that fails, copy `csgo/maps/workshop/243702660/training_aim_csgo2.bsp` from a CS:GO Legacy client subscribed to the Workshop map.
 
 ### 1v1
 - `!1v1` opens a menu with every 1v1 mode.

@@ -10,7 +10,7 @@ Everything a CS:GO server needs, ready to drop in:
 
   csgo_match.smx          Match system: ready-up, knife round, side pick,
                           pauses, round restore, demo recording, practice
-                          mode, game modes, Aim Botz, all 1v1 modes.
+                          mode, game modes, all 1v1 modes.
   csgo_loadout.smx        Skins, stickers, knives, gloves, agents, patches
                           and default weapon choices (USP-S, M4A1-S, CZ75...),
                           saved per player.
@@ -29,7 +29,7 @@ INSTALL (drag and drop)
        csgo\maps\modes\...              a map folder per game mode
        csgo\start_server.bat            the launcher - use this to start
        csgo\start_fastdl.bat            fast map downloads for players
-       csgo\download_community_maps.bat arena / Aim Botz map downloader
+       csgo\download_community_maps.bat arena map downloader
        csgo\uninstall_server_pack.bat   removes the whole pack again
 
    Updating a server you already set up? This pack replaces cfg\server.cfg
@@ -193,7 +193,6 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\practice\       Practice
   csgo\maps\modes\1v1\            1v1 match
   csgo\maps\modes\arena\          Multi-1v1 arenas
-  csgo\maps\modes\aimbotz\        Aim Botz (solo training)
 
 Each folder also has a maplist.txt of standard maps for that mode. Installed
 ones are listed near the top of the menu; missing ones are shown greyed out
@@ -210,15 +209,14 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Practice     de_mirage de_inferno de_dust2 de_nuke de_ancient
   1v1 match    de_shortdust de_lake de_shortnuke gd_rialto
   Arenas       am_inferno_banana_dolnma am_walterv2          (community)
-  Aim Botz     training_aim_csgo2                            (community)
 
 The official maps are already installed with the server. The community
-maps (arenas, Aim Botz) don't come with CS:GO and aren't included in
+maps (arenas) don't come with CS:GO and aren't included in
 this pack. To get them:
 
   download_community_maps.bat
     Put it in your csgo folder (it comes with this pack, next to "maps")
-    and double-click it. For every map in the arena and Aim Botz
+    and double-click it. For every map in the arena
     downloads.txt files it finds the CS:GO version on varq.net or the Steam
     Workshop, downloads it,
     unpacks it and puts the .bsp (and .nav, materials etc.) in the right
@@ -271,7 +269,6 @@ WHAT GETS CREATED AUTOMATICALLY
 -------------------------------
   cfg\csgo_match\warmup.cfg / knife.cfg / live.cfg / prac.cfg / duel.cfg
   cfg\csgo_match\wingman.cfg                                    (2v2 settings)
-  cfg\csgo_match\aimbotz.cfg                                   (Aim Botz)
   cfg\csgo_match\1v1.cfg / arena.cfg                            (1v1 modes)
   cfg\sourcemod\csgo_match.cfg                                 (match settings)
   addons\sourcemod\data\csgo_loadout\<steamid>.cfg             (one per player)
@@ -295,14 +292,13 @@ Game modes (admins)
                           Practice          practice mode on the chosen map
                           1v1 match         ready-up 1v1, one player per side
                           Multi-1v1 arenas  arena ladder on am_ / 1v1_ maps
-                          Aim Botz          solo aim training (below)
                           Match options     opens !options
                         The map menu also has "All maps on the server...".
                         The map menu lists, in order: the current map, the
                         mode's own map folder (see MAP FOLDERS), then other
-                        suitable maps installed on the server. For arenas and
-                        Aim Botz the maps folder (and maps\workshop)
-                        is also scanned for maps with those name prefixes.
+                        suitable maps installed on the server. For arenas the
+                        maps folder (and maps\workshop) is also scanned
+                        for am_ and 1v1_ maps.
                         Everyone else can type !gamemode to see the mode.
   !map                  change map - menu with every map on the server:
                           All maps A-Z
@@ -383,20 +379,6 @@ Best of 3 (Competitive 5v5)
   !series               maps, who picked them, and the score (anyone)
   !endseries            admins: stop the series
   Changing map or game mode yourself mid-series also ends it.
-
-Aim Botz - solo aim training
-  !aimbotz  (!aim, !training)  admins: switch to Aim Botz (map picker), or
-                        pick "Aim Botz (solo training)" in !gamemode.
-  Uses the Aim Botz - Training map (training_aim_csgo2). The map's own
-  buttons add the bots and change their settings. The mode adds infinite
-  ammo, buy anywhere, $60k, instant respawn and no round end, and lets the
-  map's buttons run bot commands (sv_allow_point_servercommand always).
-  Settings: cfg\csgo_match\aimbotz.cfg. Leave with !gamemode.
-  Getting the map: download_community_maps.bat downloads it straight from
-  the Steam Workshop (Workshop id 243702660). If that fails, subscribe to "Aim Botz - Training" (Workshop id 243702660) on a
-  PC with CS:GO Legacy, start the game once, then copy
-  csgo\maps\workshop\243702660\training_aim_csgo2.bsp into the server's
-  csgo\maps\modes\aimbotz folder.
 
 Match - practice mode
   !spawn <n>  !clear  !god

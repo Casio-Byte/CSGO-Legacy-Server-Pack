@@ -7,7 +7,7 @@ rem  Starts the CS:GO server. Double-click to run.
 rem
 rem  First run: asks a few questions (server name, passwords, LAN or
 rem  internet...) and saves the answers. After that it just starts:
-rem    1. downloads any missing community maps (arenas, Aim Botz)
+rem    1. downloads any missing community maps (1v1 arenas)
 rem    2. starts FastDL so players can download maps quickly
 rem    3. starts the server, and restarts it if it crashes
 rem

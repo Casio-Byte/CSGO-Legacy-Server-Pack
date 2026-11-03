@@ -1,5 +1,0 @@
-// Used by download_community_maps.bat - one map per line:
-//     <map name>  <varq.net page name>   or   <map name>  workshop:<Steam Workshop id>
-// The page name is the last part of the map's varq.net address.
-// workshop:<id> downloads the map straight from the Steam Workshop.
-training_aim_csgo2  workshop:243702660
