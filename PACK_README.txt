@@ -430,13 +430,14 @@ Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
 
 1v1 duel - !duel (anyone, from warmup or during arenas; also in !1v1)
   !duel                 set up a duel in 4 steps:
-                          1. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,
+                          1. opponent: list of everyone on the server
+                          2. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,
                              Glock, P250, random each round, or knives
-                          2. rounds: first to 30, 50 or 100 kills
-                          3. headshots only, or normal (every hit counts)
-                          4. opponent: anyone on the server
-  !duel <name>          same, but with that player as the opponent
-                        (skips step 4)
+                          3. rounds: first to 30, 50 or 100 kills
+                          4. headshots only, or normal (every hit counts)
+                        then the challenge is sent.
+  !duel <name>          same, with that player as the opponent (skips
+                        step 1)
   !accept / !decline    answer a challenge (30 seconds)
   !forfeit  (!ff)       give up (the other player wins)
   !endduel              admins: stop a duel

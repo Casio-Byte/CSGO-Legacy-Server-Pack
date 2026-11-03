@@ -175,12 +175,12 @@ Also included: SourceTV demo recording per match and round backups.
 ### 1v1
 - `!1v1` opens a menu with every 1v1 mode.
 - **Duel**: `!duel`, also in the `!1v1` menu. You set it up in four steps:
-  1. **gun**: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S, Glock, P250, random each round, or knives
-  2. **rounds**: first to 30, 50 or 100 kills
-  3. **headshots only**, or normal
-  4. **opponent**: anyone on the server
+  1. **opponent**: a list of everyone on the server
+  2. **gun**: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S, Glock, P250, random each round, or knives
+  3. **rounds**: first to 30, 50 or 100 kills
+  4. **headshots only**, or normal
 
-  `!duel <name>` skips step 4. Your opponent answers with `!accept` / `!decline`, and either player can `!forfeit`. In headshots-only duels, hits anywhere but the head do no damage.
+  The challenge is then sent. `!duel <name>` skips step 1. Your opponent answers with `!accept` / `!decline`, and either player can `!forfeit`. In headshots-only duels, hits anywhere but the head do no damage.
 - **Arenas**: `!guns` `!sitout` `!rank`.
   - Every arena on the map runs its own 1v1 each round.
   - Players are **shuffled** into new random pairs every round. `!options` → "Arena pairing" switches to a ladder instead (win to move up).

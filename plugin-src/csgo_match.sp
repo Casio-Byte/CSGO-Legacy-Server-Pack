@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.9.2-20261103"
+#define PLUGIN_VERSION "1.9.3-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -1198,7 +1198,7 @@ void Cmd_Help(int client)
 		Reply(client, "\x04Admin:\x01 !readyrequired <n> !restore <n> !prac !exitprac");
 	}
 	Reply(client, "\x04Practice:\x01 !spawn <n> !clear !god");
-	Reply(client, "\x04 1v1:\x01 !1v1 (all 1v1 modes) !duel [name] (gun, rounds, headshots only, opponent) !accept !decline !forfeit");
+	Reply(client, "\x04 1v1:\x01 !1v1 (all 1v1 modes) !duel [name] (opponent, gun, rounds, headshots only) !accept !decline !forfeit");
 	if (g_State == State_Arena)
 		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank — !duel gets you your own arena");
 	if (!IsAdmin(client))
@@ -1737,7 +1737,7 @@ void Cmd_Duel(int client, const char[] arg)
 		return;
 	}
 
-	// Order: gun -> rounds -> headshots only -> opponent.
+	// Order: opponent -> gun -> rounds -> headshots only.
 	g_PickOpponent[client] = 0;
 	if (arg[0] != '\0')
 	{
@@ -1745,8 +1745,10 @@ void Cmd_Duel(int client, const char[] arg)
 		if (target <= 0)
 			return;
 		g_PickOpponent[client] = GetClientUserId(target); // opponent already chosen
+		ShowDuelWeaponMenu(client);
+		return;
 	}
-	ShowDuelWeaponMenu(client);
+	ShowDuelOpponentMenu(client);
 }
 
 int FindDuelTarget(int client, const char[] name)
@@ -1774,8 +1776,7 @@ int FindDuelTarget(int client, const char[] name)
 void ShowDuelOpponentMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelOpponent);
-	menu.SetTitle("1v1 duel — step 4 of 4: choose your opponent\n%s, first to %d%s", g_DuelWepName[g_PickWeapon[client]],
-		g_PickTarget[client], g_PickHs[client] ? ", headshots only" : "");
+	menu.SetTitle("1v1 duel — step 1 of 4: who do you want to duel?");
 	char info[16], name[MAX_NAME_LENGTH];
 	int count = 0;
 	for (int i = 1; i <= MaxClients; i++)
@@ -1784,7 +1785,13 @@ void ShowDuelOpponentMenu(int client)
 			continue;
 		IntToString(GetClientUserId(i), info, sizeof(info));
 		GetClientName(i, name, sizeof(name));
-		menu.AddItem(info, name);
+		if (g_State == State_Arena && FindArenaDuel(GetClientUserId(i)) != -1)
+		{
+			Format(name, sizeof(name), "%s (in a duel)", name);
+			menu.AddItem(info, name, ITEMDRAW_DISABLED);
+		}
+		else
+			menu.AddItem(info, name);
 		count++;
 	}
 	if (count == 0)
@@ -1808,11 +1815,18 @@ public int Handler_DuelOpponent(Menu menu, MenuAction action, int client, int it
 		char info[16];
 		menu.GetItem(item, info, sizeof(info));
 		g_PickOpponent[client] = StringToInt(info);
-		SendChallenge(client, GetClientOfUserId(g_PickOpponent[client]), g_PickWeapon[client], g_PickTarget[client], g_PickHs[client]);
+		int opp = GetClientOfUserId(g_PickOpponent[client]);
+		if (opp <= 0 || !IsClientInGame(opp))
+		{
+			Reply(client, "That player has left.");
+			ShowDuelOpponentMenu(client);
+			return 0;
+		}
+		ShowDuelWeaponMenu(client);
 	}
 	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
 	{
-		ShowDuelHsMenu(client);
+		Cmd_OneVOneMenu(client, "");
 	}
 	return 0;
 }
@@ -1820,7 +1834,11 @@ public int Handler_DuelOpponent(Menu menu, MenuAction action, int client, int it
 void ShowDuelWeaponMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelWeapon);
-	menu.SetTitle("1v1 duel — step 1 of 4: gun");
+	int opp = GetClientOfUserId(g_PickOpponent[client]);
+	if (opp > 0 && IsClientInGame(opp))
+		menu.SetTitle("1v1 duel vs %N — step 2 of 4: gun", opp);
+	else
+		menu.SetTitle("1v1 duel — step 2 of 4: gun");
 	char info[8];
 	for (int i = 0; i < DUEL_WEAPONS; i++)
 	{
@@ -1846,7 +1864,7 @@ public int Handler_DuelWeapon(Menu menu, MenuAction action, int client, int item
 	}
 	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
 	{
-		Cmd_OneVOneMenu(client, "");
+		ShowDuelOpponentMenu(client);
 	}
 	return 0;
 }
@@ -1854,7 +1872,7 @@ public int Handler_DuelWeapon(Menu menu, MenuAction action, int client, int item
 void ShowDuelTargetMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelTarget);
-	menu.SetTitle("1v1 duel — step 2 of 4: rounds\n%s — first to how many kills?", g_DuelWepName[g_PickWeapon[client]]);
+	menu.SetTitle("1v1 duel — step 3 of 4: rounds\n%s — first to how many kills?", g_DuelWepName[g_PickWeapon[client]]);
 	menu.AddItem("30", "First to 30");
 	menu.AddItem("50", "First to 50");
 	menu.AddItem("100", "First to 100");
@@ -1886,7 +1904,7 @@ void ShowDuelHsMenu(int client)
 {
 	bool knives = StrEqual(g_DuelWepCls[g_PickWeapon[client]], "knife");
 	Menu menu = new Menu(Handler_DuelHs);
-	menu.SetTitle("1v1 duel — step 3 of 4: headshots only?\n%s, first to %d", g_DuelWepName[g_PickWeapon[client]], g_PickTarget[client]);
+	menu.SetTitle("1v1 duel — step 4 of 4: headshots only?\n%s, first to %d", g_DuelWepName[g_PickWeapon[client]], g_PickTarget[client]);
 	menu.AddItem("0", "Normal — every hit counts");
 	menu.AddItem("1", knives ? "Headshots only (not with knives)" : "Headshots only", knives ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
 	menu.ExitBackButton = true;
@@ -1908,7 +1926,10 @@ public int Handler_DuelHs(Menu menu, MenuAction action, int client, int item)
 		if (opp > 0 && IsClientInGame(opp))
 			SendChallenge(client, opp, g_PickWeapon[client], g_PickTarget[client], g_PickHs[client]);
 		else
+		{
+			Reply(client, "That player has left — pick someone else.");
 			ShowDuelOpponentMenu(client);
+		}
 	}
 	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
 	{
@@ -3502,7 +3523,7 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 
 	Menu menu = new Menu(Handler_OneVOne);
 	menu.SetTitle("1v1 modes\nNow: %s", mode);
-	menu.AddItem("duel", "!duel — pick gun, rounds, headshots only, then an opponent");
+	menu.AddItem("duel", "!duel — pick an opponent, then gun, rounds, headshots only");
 	menu.AddItem("match", admin ? "1v1 match — ready-up MR15, one per side" : "1v1 match (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	menu.AddItem("arena", admin ? "Multi-1v1 arenas — ladder on am_ maps" : "Multi-1v1 arenas (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	if (g_State == State_Arena)
