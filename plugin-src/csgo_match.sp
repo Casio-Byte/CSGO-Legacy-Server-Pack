@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.9.1-20261103"
+#define PLUGIN_VERSION "1.9.2-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -1198,9 +1198,11 @@ void Cmd_Help(int client)
 		Reply(client, "\x04Admin:\x01 !readyrequired <n> !restore <n> !prac !exitprac");
 	}
 	Reply(client, "\x04Practice:\x01 !spawn <n> !clear !god");
-	Reply(client, "\x04 1v1:\x01 !1v1 (all 1v1 modes) !duel [name] !accept !decline !forfeit");
+	Reply(client, "\x04 1v1:\x01 !1v1 (all 1v1 modes) !duel [name] (gun, rounds, headshots only, opponent) !accept !decline !forfeit");
 	if (g_State == State_Arena)
-		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank");
+		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank — !duel gets you your own arena");
+	if (!IsAdmin(client))
+		Reply(client, "\x04Admin:\x01 /login <password>");
 	if (IsAdmin(client))
 		Reply(client, "\x04Modes:\x01 !gamemode (all game modes)  !options (match settings)");
 	else
@@ -2748,7 +2750,7 @@ void ShowGameModeMenu(int client)
 			Format(line, sizeof(line), "%s [current]", g_GmName[i]);
 		else
 			strcopy(line, sizeof(line), g_GmName[i]);
-		if (i == GM_Competitive || i == GM_Wingman)
+		if (i == GM_Competitive || i == GM_Wingman || i == GM_1v1Match)
 			StrCat(line, sizeof(line), " (ready-up match)");
 		menu.AddItem(info, line);
 	}
@@ -2906,7 +2908,7 @@ public Action Timer_SwitchMode(Handle timer)
 
 	g_PracticeNext = (gm == GM_Practice);
 	if (g_ArenaNext && gm != GM_Arena)
-		ResetMovementCvars();
+		ResetArenaCvars();
 	g_OneVOneNext = (gm == GM_1v1Match);
 	g_ArenaNext = (gm == GM_Arena);
 	if (g_cvDuelActive != null)
@@ -3532,7 +3534,7 @@ public int Handler_OneVOne(Menu menu, MenuAction action, int client, int item)
 }
 
 // Undo the arena settings when switching to another mode.
-void ResetMovementCvars()
+void ResetArenaCvars()
 {
 	ServerCommand("mp_ignore_round_win_conditions 0");
 	ServerCommand("mp_respawn_on_death_ct 0");

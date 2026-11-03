@@ -9,7 +9,7 @@
  *  Item data (skins, stickers, agents, patches) is read from the server's own
  *  scripts/items/items_game.txt at startup, so it always matches the game.
  *
- *  Chat commands: !ws  !loadout  !knife  !gloves  !agents  !patches  !stickers  !gen
+ *  Chat commands: !ws  !loadout  !presets  !knife  !gloves  !agents  !patches  !stickers  !gen
  *
  *  Requirements
  *    - SourceMod 1.11+ with FollowCSGOServerGuidelines set to "no" in

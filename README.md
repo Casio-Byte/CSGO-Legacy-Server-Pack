@@ -133,7 +133,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Deathmatch / Arms Race / Demolition | the game's own rules |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
-| 1v1 match | ready-up 1v1, one player per side, on Workshop aim maps only |
+| 1v1 match | ready-up 1v1 (knife round, pauses as in 5v5), one player per side, on Workshop aim maps only |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
 
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
@@ -162,6 +162,7 @@ Also included: SourceTV demo recording per match and round backups.
 ### `!options` (admins, saved)
 - series (single map or best of 3) and vote time
 - knife round
+- arena pairing (shuffle every round, or ladder)
 - players needed to start
 - match length (MR15, MR12, 16 rounds)
 - overtime and friendly fire
@@ -210,7 +211,7 @@ Also included: SourceTV demo recording per match and round backups.
 | `!3rd` | third person to view your agent (blocked in live matches) |
 | `!gen <weapon> <skin> [pattern] [wear] [sticker wear...]` | gen-code |
 
-**Preset sets** (`addons/sourcemod/configs/csgo_loadout_presets.cfg`, editable). The first sticker craft goes on rifles and the AWP, the second on pistols:
+**Preset sets** (`addons/sourcemod/configs/csgo_loadout_presets.cfg`, editable). The first sticker craft goes on rifles, SMGs, heavies and snipers, the second on pistols:
 
 | Set | Knife | Gloves | Highlights | Sticker crafts |
 |---|---|---|---|---|

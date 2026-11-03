@@ -277,6 +277,7 @@ WHAT GETS CREATED AUTOMATICALLY
   cfg\sourcemod\csgo_match.cfg                                 (match settings)
   addons\sourcemod\data\csgo_loadout\<steamid>.cfg             (one per player)
   addons\sourcemod\data\csgo_match_options.txt                 (!options choices)
+  addons\sourcemod\data\csgo_match_admins.txt                  (PCs logged in with /login)
 
 
 CHAT COMMANDS
@@ -319,6 +320,7 @@ Game modes (admins)
                           5v5 series: single map or best of 3
                           map vote time (best of 3)
                           knife round on/off
+                          arena pairing: shuffle every round or ladder
                           players needed to start (everyone, 2, 4, 6, 8, 10)
                           match length (MR15, MR12, 16 rounds, or live.cfg)
                           overtime on/off
@@ -497,7 +499,12 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
   match_allow_map_downloads           (1 = players download missing maps;
                                        also loads cfg\csgo_match\fastdl.cfg)
   match_max_download_mb               (largest map sent to players, MB)
-  match_admin_password                (for /login; empty = off)
+  match_admin_password                (for /login; empty = off - set by
+                                       start_server.bat setup)
+  match_series_maps                   (1 = single map, 3 = best of 3)
+  match_veto_time                     (seconds per best-of-3 map vote)
+  match_arena_shuffle                 (1 = shuffle arena pairs every round,
+                                       0 = ladder)
 
 
 ADMIN ACCESS
@@ -505,9 +512,8 @@ ADMIN ACCESS
 Admin commands need the "b" or "z" flag. Two ways to get it:
 
 1. Password login (works in LAN mode, where SteamIDs can't be checked)
-   Add this line to the bottom of csgo\cfg\sourcemod\csgo_match.cfg and
-   restart the server (pick your own password):
-       match_admin_password "your-admin-password"
+   start_server.bat's setup asks for the admin password (change it with
+   "start_server.bat setup"; it's saved in cfg\csgo_match\server_settings.cfg).
    Then in game type in chat:   /login your-admin-password
    (the / keeps it out of chat - !login and .login are hidden too)
    You get full admin, and that PC is remembered so you're logged in

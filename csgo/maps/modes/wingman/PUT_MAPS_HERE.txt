@@ -18,7 +18,7 @@ server - nothing to download. Any that are missing from your install
 show greyed out in the menu.
 
   - Copy the .bsp file (and its .nav file, if it has one) here.
-  - The file name is the map name: surf_mesa.bsp shows as surf_mesa.
+  - The file name is the map name: de_cache.bsp shows as de_cache.
   - Add or remove names in maplist.txt to change the standard list.
   - No restart needed - just open the menu again.
   - If the map needs extra files (models, sounds, materials), put those in
