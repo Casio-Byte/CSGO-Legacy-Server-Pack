@@ -1,7 +1,0 @@
-// Standard maps for Surf - one map name per line.
-// Installed maps are listed at the top of the !gamemode map menu;
-// missing ones are shown greyed out as (not installed).
-// Edit freely. Lines starting with // are ignored.
-surf_utopia_v3
-surf_mesa_revo_go
-surf_mai_redone_csgo

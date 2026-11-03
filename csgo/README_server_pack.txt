@@ -10,7 +10,7 @@ Everything a CS:GO server needs, ready to drop in:
 
   csgo_match.smx          Match system: ready-up, knife round, side pick,
                           pauses, round restore, demo recording, practice
-                          mode, game modes, KZ/Bhop/Surf, all 1v1 modes.
+                          mode, game modes, Aim Botz, all 1v1 modes.
   csgo_loadout.smx        Skins, stickers, knives, gloves, agents, patches
                           and default weapon choices (USP-S, M4A1-S, CZ75...),
                           saved per player.
@@ -29,7 +29,7 @@ INSTALL (drag and drop)
        csgo\maps\modes\...              a map folder per game mode
        csgo\start_server.bat            the launcher - use this to start
        csgo\start_fastdl.bat            fast map downloads for players
-       csgo\download_community_maps.bat KZ/Bhop/Surf/arena map downloader
+       csgo\download_community_maps.bat arena / Aim Botz map downloader
        csgo\uninstall_server_pack.bat   removes the whole pack again
 
    Updating a server you already set up? This pack replaces cfg\server.cfg
@@ -191,9 +191,6 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\armsrace\       Arms Race
   csgo\maps\modes\demolition\     Demolition
   csgo\maps\modes\practice\       Practice
-  csgo\maps\modes\kz\             KZ (climb)
-  csgo\maps\modes\bhop\           Bhop
-  csgo\maps\modes\surf\           Surf
   csgo\maps\modes\1v1\            1v1 match
   csgo\maps\modes\arena\          Multi-1v1 arenas
   csgo\maps\modes\aimbotz\        Aim Botz (solo training)
@@ -212,21 +209,18 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Demolition   de_lake de_safehouse de_bank de_shortnuke
   Practice     de_mirage de_inferno de_dust2 de_nuke de_ancient
   1v1 match    de_shortdust de_lake de_shortnuke gd_rialto
-  KZ           kz_experiment kz_exps_cursedjourney           (community)
-  Bhop         bhop_xof bhop_skyruins bhop_zygos             (community)
-  Surf         surf_utopia_v3 surf_mesa_revo_go surf_mai_redone_csgo
-                                                             (community)
   Arenas       am_inferno_banana_dolnma am_walterv2          (community)
   Aim Botz     training_aim_csgo2                            (community)
 
 The official maps are already installed with the server. The community
-maps (KZ, Bhop, Surf, arenas) don't come with CS:GO and aren't included in
+maps (arenas, Aim Botz) don't come with CS:GO and aren't included in
 this pack. To get them:
 
   download_community_maps.bat
     Put it in your csgo folder (it comes with this pack, next to "maps")
-    and double-click it. For every map in the KZ, Bhop, Surf and arena
-    downloads.txt files it finds the CS:GO version on varq.net, downloads it,
+    and double-click it. For every map in the arena and Aim Botz
+    downloads.txt files it finds the CS:GO version on varq.net or the Steam
+    Workshop, downloads it,
     unpacks it and puts the .bsp (and .nav, materials etc.) in the right
     place. Maps you already have are skipped, so it's safe to run again.
     Anything it can't get is listed at the end with a link.
@@ -277,7 +271,7 @@ WHAT GETS CREATED AUTOMATICALLY
 -------------------------------
   cfg\csgo_match\warmup.cfg / knife.cfg / live.cfg / prac.cfg / duel.cfg
   cfg\csgo_match\wingman.cfg                                    (2v2 settings)
-  cfg\csgo_match\kz.cfg / bhop.cfg / surf.cfg                   (movement physics)
+  cfg\csgo_match\aimbotz.cfg                                   (Aim Botz)
   cfg\csgo_match\1v1.cfg / arena.cfg                            (1v1 modes)
   cfg\sourcemod\csgo_match.cfg                                 (match settings)
   addons\sourcemod\data\csgo_loadout\<steamid>.cfg             (one per player)
@@ -299,19 +293,15 @@ Game modes (admins)
                           Arms Race
                           Demolition
                           Practice          practice mode on the chosen map
-                          KZ (climb)        kz_ / kzpro_ / bkz_ / xc_ maps
-                          Bhop              bhop_ maps (auto-bhop on)
-                          Surf              surf_ maps
                           1v1 match         ready-up 1v1, one player per side
                           Multi-1v1 arenas  arena ladder on am_ / 1v1_ maps
                           Aim Botz          solo aim training (below)
-                          1v1 aim duel      challenge a player
                           Match options     opens !options
                         The map menu also has "All maps on the server...".
                         The map menu lists, in order: the current map, the
                         mode's own map folder (see MAP FOLDERS), then other
-                        suitable maps installed on the server. For KZ, Bhop,
-                        Surf and arenas the maps folder (and maps\workshop)
+                        suitable maps installed on the server. For arenas and
+                        Aim Botz the maps folder (and maps\workshop)
                         is also scanned for maps with those name prefixes.
                         Everyone else can type !gamemode to see the mode.
   !map                  change map - menu with every map on the server:
@@ -345,32 +335,6 @@ Game modes (admins)
   to the mode in your launch line (+game_type 0 +game_mode 1 = Competitive).
   In Casual, Deathmatch, Arms Race and Demolition the game runs its own
   rules; the ready-up commands only apply in Competitive and Wingman.
-
-KZ / Bhop / Surf (anyone, while the server is in one of these modes)
-  !r  (!respawn)        back to the start
-  !cp  (!checkpoint)    save a checkpoint (keeps your last 20)
-  !tp  (!teleport)      go to your current checkpoint
-  !pcp / !ncp           previous / next checkpoint
-  !speed                speedometer on/off (on by default; spectators see
-                        the speed of the player they're watching)
-  !hide                 hide/show other players
-  !noclip  (!nc)        fly through walls (practice)
-
-  Players respawn instantly, pass through each other and can't hurt each
-  other. Map damage (falling into kill zones) still works.
-  Surf: falling off sends you back to the start, like !r - until you finish
-  a stage; after that a fall takes you back to the start of the last stage
-  you reached ("Stage N reached" shows when you get to a new one). The
-  plugin works this out from the map's own teleports. !r always goes back
-  to the very start. Turn it off with match_surf_auto_restart 0 in
-  cfg\sourcemod\csgo_match.cfg.
-  Physics per mode (edit freely):
-    cfg\csgo_match\kz.cfg      airaccelerate 100, no auto-bhop, no stamina
-    cfg\csgo_match\bhop.cfg    airaccelerate 1000, auto-bhop, no stamina
-    cfg\csgo_match\surf.cfg    airaccelerate 150, auto-bhop, no stamina
-  These modes don't include run timers or leaderboards. Those need a
-  dedicated plugin such as GOKZ (KZ), SurfTimer (surf) or shavit's bhop
-  timer.
 
 Match - players
   !ready  (!r)          mark yourself ready in warmup
@@ -439,7 +403,7 @@ Match - practice mode
 
 1v1 MODES
   !1v1                  menu with every 1v1 mode:
-                          Aim duel          anyone can challenge (below)
+                          !duel             anyone can challenge (below)
                           1v1 match         admins: switch the server to a
                                             ready-up 1v1 match
                           Multi-1v1 arenas  admins: switch the server to the
@@ -467,18 +431,23 @@ Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
   !rank                 which arena you're in
   Settings: cfg\csgo_match\arena.cfg
 
-Aim duel (anyone, from warmup)
-  !duel                 challenge someone: pick opponent, weapon
-                        (AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S, Glock,
-                        P250, random each round, or knives) and kills to win
-  !duel <name>          challenge a player directly by name
+1v1 duel - !duel (anyone, from warmup; also in the !1v1 menu)
+  !duel                 set up a duel in 4 steps:
+                          1. gun: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S,
+                             Glock, P250, random each round, or knives
+                          2. rounds: first to 5, 10, 16 or 25 kills
+                          3. headshots only, or normal (every hit counts)
+                          4. opponent: anyone on the server
+  !duel <name>          same, but with that player as the opponent
+                        (skips step 4)
   !accept / !decline    answer a challenge (30 seconds)
   !forfeit  (!ff)       give up (the other player wins)
   !endduel              admins: stop a duel
 
   Both players spawn facing each other at random spots around the map,
   freeze for 1 second, then fight. Every kill resets both with full HP and
-  armour. Score shows on the scoreboard and on screen. Everyone else is
+  armour. Score shows on the scoreboard and on screen. In headshots-only
+  duels, hits anywhere but the head do no damage. Everyone else is
   moved to spectator for the duel and can rejoin afterwards.
   Duel settings: cfg\csgo_match\duel.cfg
 

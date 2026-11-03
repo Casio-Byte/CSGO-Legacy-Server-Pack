@@ -1,14 +1,12 @@
 @echo off
 setlocal
-title Download community maps (KZ / Bhop / Surf / Arenas)
+title Download community maps (Arenas / Aim Botz)
 
 rem ------------------------------------------------------------------
-rem  Downloads the KZ, Bhop, Surf and Multi-1v1 arena maps listed in
-rem      maps\modes\kz\downloads.txt
-rem      maps\modes\bhop\downloads.txt
-rem      maps\modes\surf\downloads.txt
+rem  Downloads the Multi-1v1 arena and Aim Botz maps listed in
 rem      maps\modes\arena\downloads.txt
-rem  from varq.net (CS:GO .bsp versions) and puts each .bsp into its
+rem      maps\modes\aimbotz\downloads.txt
+rem  from varq.net or the Steam Workshop and puts each .bsp into its
 rem  mode folder. Edit those downloads.txt files to change what it gets.
 rem
 rem  Put this file in your server's "csgo" folder and double-click it.
@@ -42,7 +40,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::
 
 $csgo  = $env:CSGO_DIR.TrimEnd('\')
 $temp  = Join-Path $csgo '_map_downloads'
-$modes = @('kz', 'bhop', 'surf', 'arena', 'aimbotz')
+$modes = @('arena', 'aimbotz')
 $ua    = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 $curl  = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source
 $sevenZip = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -121,17 +119,11 @@ Write-Host ''
 # Built-in standard maps (map name, varq.net page name) - used when a mode
 # folder has no downloads.txt yet, e.g. on a server set up with an older pack.
 $defaults = @{
-    'kz'    = @(@('kz_experiment', 'kz-experiment'), @('kz_exps_cursedjourney', 'kz_exps_cursedjourney'))
-    'bhop'  = @(@('bhop_xof', 'bhop_xof'), @('bhop_skyruins', 'bhop_skyruins'), @('bhop_zygos', 'bhop_zygos'))
-    'surf'  = @(@('surf_utopia_v3', 'surf_utopia_v3'), @('surf_mesa_revo_go', 'surf_mesa_revo_go'), @('surf_mai_redone_csgo', 'surf_mai_redone_csgo'))
     'arena' = @(@('am_inferno_banana_dolnma', 'am_inferno_banana-1v1-arena'), @('am_walterv2', 'am_walterv2'))
     'aimbotz' = @(,@('training_aim_csgo2', 'workshop:243702660'))
 }
 # The first pack's default lists - replaced automatically (edited lists are left alone).
 $oldDefaults = @{
-    'kz'    = 'kz_grassworld kz_phamous kz_victoria'
-    'bhop'  = 'bhop_arcane bhop_japan bhop_fps_max'
-    'surf'  = 'surf_beginner surf_utopia_v3 surf_kitsune surf_mesa'
     'arena' = 'am_dust2 am_redline am_trainyard'
 }
 

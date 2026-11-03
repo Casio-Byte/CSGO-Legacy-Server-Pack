@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.6.0-20261103"
+#define PLUGIN_VERSION "1.7.0-20261103"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -43,7 +43,6 @@ enum MatchState
 	State_Live,
 	State_Practice,
 	State_Duel,
-	State_Movement,
 	State_Arena
 };
 
@@ -104,6 +103,7 @@ int    g_DuelScoreA = 0;
 int    g_DuelScoreB = 0;
 int    g_DuelTarget = 10;
 int    g_DuelWeapon = 0;       // index into g_DuelWep*
+bool   g_DuelHs = false;       // headshots only
 int    g_DuelRoundWeapon = 0;  // weapon for the current round (differs when "random")
 bool   g_DuelRoundOver = false;
 int    g_DuelSerial = 0;       // bumps on every reset so stale timers are ignored
@@ -114,9 +114,12 @@ int    g_ChalFrom = 0;         // userid of challenger
 int    g_ChalTo = 0;           // userid of challenged player
 int    g_ChalWeapon = 0;
 int    g_ChalTarget = 10;
+bool   g_ChalHs = false;
 Handle g_ChalTimer = null;
 int    g_PickOpponent[MAXPLAYERS + 1];
 int    g_PickWeapon[MAXPLAYERS + 1];
+int    g_PickTarget[MAXPLAYERS + 1];
+bool   g_PickHs[MAXPLAYERS + 1];
 
 bool   g_Ready[MAXPLAYERS + 1];
 bool   g_KnifeEnabled = true;
@@ -147,36 +150,6 @@ ConVar g_cvOvertime;
 ConVar g_cvFriendlyFire;
 
 bool g_PracticeNext = false;   // set by !gamemode / !prac so practice survives a map change
-
-/* KZ / Bhop / Surf */
-#define MOVE_NONE 0
-#define MOVE_KZ   1
-#define MOVE_BHOP 2
-#define MOVE_SURF 3
-#define MAX_CPS   20
-int   g_MoveModeNext = MOVE_NONE;   // survives map changes, like g_PracticeNext
-int   g_MoveMode = MOVE_NONE;       // active this map
-// Surf auto-restart: falls go back to the start, or to the last stage reached.
-#define SURF_MAX_STAGES 48
-#define SURF_NEAR 700.0
-ConVar g_cvSurfAutoRestart;
-float g_SpawnPos[MAXPLAYERS + 1][3];
-float g_SpawnAng[MAXPLAYERS + 1][3];
-bool  g_HasSpawn[MAXPLAYERS + 1];
-float g_StagePos[MAXPLAYERS + 1][SURF_MAX_STAGES][3];
-float g_StageAng[MAXPLAYERS + 1][SURF_MAX_STAGES][3];
-int   g_StageCount[MAXPLAYERS + 1];
-bool  g_FreshStart[MAXPLAYERS + 1];   // next spawn is a real restart (!r, join)
-bool  g_TeleportPending[MAXPLAYERS + 1];
-float g_LastPos[MAXPLAYERS + 1][3];
-bool  g_HaveLast[MAXPLAYERS + 1];
-int   g_IgnoreJump[MAXPLAYERS + 1];   // ticks to ignore after the plugin itself moves someone
-float g_CpPos[MAXPLAYERS + 1][MAX_CPS][3];
-float g_CpAng[MAXPLAYERS + 1][MAX_CPS][3];
-int   g_CpCount[MAXPLAYERS + 1];
-int   g_CpIndex[MAXPLAYERS + 1];
-bool  g_ShowSpeed[MAXPLAYERS + 1] = { true, ... };
-bool  g_HidePlayers[MAXPLAYERS + 1];
 
 /* 1v1 match / Multi-1v1 arenas */
 bool  g_OneVOneNext = false;     // 1v1 ready-up match (survives map changes)
@@ -252,8 +225,6 @@ char g_RegisteredCmds[][] =
 	"prac", "exitprac", "clear", "spawn", "god",
 	"duel", "1v1", "accept", "decline", "forfeit", "ff", "endduel",
 	"gamemode", "mode", "modes", "options", "settings",
-	"respawn", "cp", "checkpoint", "tp", "teleport", "pcp", "prevcp", "ncp", "nextcp",
-	"speed", "hide", "noclip", "nc",
 	"guns", "sitout", "rank", "maps", "changemap",
 	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries",
 	"aimbotz", "aimbots", "aim", "training"
@@ -441,110 +412,8 @@ char g_CfgWingman[][] =
 	"mp_c4timer 40"
 };
 
-char g_CfgKZ[][] =
-{
-	"// KZ (climb) — loaded every map while the server is in KZ mode.",
-	"sv_cheats 0",
-	"sv_airaccelerate 100",
-	"sv_accelerate 6.5",
-	"sv_friction 5.2",
-	"sv_enablebunnyhopping 1",
-	"sv_autobunnyhopping 0",
-	"sv_staminajumpcost 0",
-	"sv_staminalandcost 0",
-	"sv_maxvelocity 3500",
-	"sv_falldamage_scale 0",
-	"mp_ignore_round_win_conditions 1",
-	"mp_roundtime 60",
-	"mp_roundtime_defuse 60",
-	"mp_roundtime_hostage 60",
-	"mp_freezetime 0",
-	"mp_respawn_on_death_ct 1",
-	"mp_respawn_on_death_t 1",
-	"mp_respawn_immunitytime 0",
-	"mp_friendlyfire 0",
-	"mp_solid_teammates 0",
-	"mp_autoteambalance 0",
-	"mp_limitteams 0",
-	"mp_death_drop_gun 0",
-	"mp_give_player_c4 0",
-	"mp_buy_anywhere 0",
-	"mp_buytime 0",
-	"mp_ct_default_secondary \"weapon_usp_silencer\"",
-	"mp_t_default_secondary \"weapon_usp_silencer\"",
-	"bot_quota 0",
-	"bot_kick"
-};
 
-char g_CfgBhop[][] =
-{
-	"// Bhop — loaded every map while the server is in Bhop mode.",
-	"sv_cheats 0",
-	"sv_airaccelerate 1000",
-	"sv_accelerate 5.5",
-	"sv_friction 4",
-	"sv_enablebunnyhopping 1",
-	"sv_autobunnyhopping 1",
-	"sv_staminajumpcost 0",
-	"sv_staminalandcost 0",
-	"sv_maxvelocity 3500",
-	"sv_falldamage_scale 0",
-	"mp_ignore_round_win_conditions 1",
-	"mp_roundtime 60",
-	"mp_roundtime_defuse 60",
-	"mp_roundtime_hostage 60",
-	"mp_freezetime 0",
-	"mp_respawn_on_death_ct 1",
-	"mp_respawn_on_death_t 1",
-	"mp_respawn_immunitytime 0",
-	"mp_friendlyfire 0",
-	"mp_solid_teammates 0",
-	"mp_autoteambalance 0",
-	"mp_limitteams 0",
-	"mp_death_drop_gun 0",
-	"mp_give_player_c4 0",
-	"mp_buy_anywhere 1",
-	"mp_buytime 99999",
-	"mp_startmoney 16000",
-	"mp_maxmoney 16000",
-	"bot_quota 0",
-	"bot_kick"
-};
 
-char g_CfgSurf[][] =
-{
-	"// Surf — loaded every map while the server is in Surf mode.",
-	"sv_cheats 0",
-	"sv_airaccelerate 150",
-	"sv_accelerate 10",
-	"sv_friction 4",
-	"sv_enablebunnyhopping 1",
-	"sv_autobunnyhopping 1",
-	"sv_staminajumpcost 0",
-	"sv_staminalandcost 0",
-	"sv_maxvelocity 3500",
-	"sv_falldamage_scale 0",
-	"mp_ignore_round_win_conditions 1",
-	"mp_roundtime 60",
-	"mp_roundtime_defuse 60",
-	"mp_roundtime_hostage 60",
-	"mp_freezetime 0",
-	"mp_respawn_on_death_ct 1",
-	"mp_respawn_on_death_t 1",
-	"mp_respawn_immunitytime 0",
-	"mp_friendlyfire 0",
-	"mp_solid_teammates 0",
-	"mp_autoteambalance 0",
-	"mp_limitteams 0",
-	"mp_death_drop_gun 0",
-	"mp_give_player_c4 0",
-	"mp_buy_anywhere 1",
-	"mp_buytime 99999",
-	"mp_startmoney 16000",
-	"mp_maxmoney 16000",
-	"bot_quota 0",
-	"bot_kick"
-};
 
 char g_Cfg1v1[][] =
 {
@@ -658,7 +527,6 @@ public void OnPluginStart()
 	g_cvOvertime      = CreateConVar("match_overtime", "-1", "Overtime: 1 = on, 0 = off, -1 = use live.cfg", _, true, -1.0, true, 1.0);
 	g_cvFriendlyFire  = CreateConVar("match_friendlyfire", "-1", "Friendly fire in matches: 1 = on, 0 = off, -1 = use live.cfg", _, true, -1.0, true, 1.0);
 	g_cvSeries        = CreateConVar("match_series_maps", "1", "Competitive 5v5: 1 = single map, 3 = best of 3 with a map veto (teams vote to ban/pick)", _, true, 1.0, true, 3.0);
-	g_cvSurfAutoRestart = CreateConVar("match_surf_auto_restart", "1", "Surf: falling sends you back to the start, or to the start of the last stage you reached (1 = on)", _, true, 0.0, true, 1.0);
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
@@ -700,7 +568,6 @@ public void OnPluginStart()
 	CreateModeFolders();
 
 	CreateTimer(30.0, Timer_Remind, _, TIMER_REPEAT);
-	CreateTimer(0.1, Timer_Speedometer, _, TIMER_REPEAT);
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i))
@@ -764,8 +631,7 @@ void HandleJoin(int client)
 public void OnClientPutInServer(int client)
 {
 	g_JoinHandled[client] = false;
-	SDKHook(client, SDKHook_OnTakeDamage, Hook_MoveTakeDamage);
-	SDKHook(client, SDKHook_SetTransmit, Hook_MoveTransmit);
+	SDKHook(client, SDKHook_TraceAttack, Hook_DuelTraceAttack);
 	// In LAN mode / -insecure the admin check may never run; don't wait for it.
 	if (!IsFakeClient(client))
 		CreateTimer(4.0, Timer_JoinFallback, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
@@ -782,13 +648,6 @@ public Action Timer_JoinFallback(Handle timer, int userid)
 public void OnClientDisconnect(int client)
 {
 	g_Ready[client] = false;
-	g_CpCount[client] = 0;
-	g_CpIndex[client] = 0;
-	g_StageCount[client] = 0;
-	g_HasSpawn[client] = false;
-	g_FreshStart[client] = true;
-	g_ShowSpeed[client] = true;
-	g_HidePlayers[client] = false;
 	ArenaOnDisconnect(client);
 	DuelOnDisconnect(client);
 	g_VetoVote[client] = -1;
@@ -838,17 +697,7 @@ bool Is(const char[] a, const char[] b)
 void Dispatch(int client, const char[] cmd, const char[] arg)
 {
 	// players
-	// KZ / Bhop / Surf: !r means "back to start" there
-	if (g_State == State_Movement && (Is(cmd, "r") || Is(cmd, "respawn")))  Cmd_MoveRestart(client);
-	else if (Is(cmd, "respawn"))                                         Reply(client, "!respawn works in KZ, Bhop and Surf modes.");
-	else if (Is(cmd, "cp") || Is(cmd, "checkpoint"))                     Cmd_Checkpoint(client);
-	else if (Is(cmd, "tp") || Is(cmd, "teleport"))                       Cmd_TeleportCp(client, 0);
-	else if (Is(cmd, "pcp") || Is(cmd, "prevcp"))                        Cmd_TeleportCp(client, -1);
-	else if (Is(cmd, "ncp") || Is(cmd, "nextcp"))                        Cmd_TeleportCp(client, 1);
-	else if (Is(cmd, "speed"))                                           Cmd_ToggleSpeed(client);
-	else if (Is(cmd, "hide"))                                            Cmd_ToggleHide(client);
-	else if (Is(cmd, "noclip") || Is(cmd, "nc"))                         Cmd_Noclip(client);
-	else if (Is(cmd, "ready") || Is(cmd, "r") || Is(cmd, "rdy"))         Cmd_Ready(client, true);
+	if (Is(cmd, "ready") || Is(cmd, "r") || Is(cmd, "rdy"))         Cmd_Ready(client, true);
 	else if (Is(cmd, "unready") || Is(cmd, "ur") || Is(cmd, "notready")) Cmd_Ready(client, false);
 	else if (Is(cmd, "pause"))                                           Cmd_Pause(client, false);
 	else if (Is(cmd, "tech"))                                            Cmd_Pause(client, true);
@@ -1080,7 +929,7 @@ void Cmd_Ready(int client, bool ready)
 		return;
 	if (g_State != State_Warmup)
 	{
-		if ((g_State == State_None || g_State == State_Movement) && !IsMatchMode())
+		if (g_State == State_None && !IsMatchMode())
 		{
 			char mode[32];
 			GetModeName(mode, sizeof(mode));
@@ -1369,8 +1218,6 @@ void Cmd_Help(int client)
 	Reply(client, "\x04 1v1:\x01 !1v1 (all 1v1 modes) !duel [name] !accept !decline !forfeit");
 	if (g_State == State_Arena)
 		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank");
-	if (g_State == State_Movement)
-		Reply(client, "\x04Movement:\x01 !r !cp !tp !pcp !ncp !speed !hide !noclip");
 	if (IsAdmin(client))
 		Reply(client, "\x04Modes:\x01 !gamemode (all game modes)  !options (match settings)");
 	else
@@ -1396,7 +1243,6 @@ void Cmd_Status(int client)
 		case State_Live:       strcopy(state, sizeof(state), "Live");
 		case State_Practice:   strcopy(state, sizeof(state), "Practice");
 		case State_Duel:       strcopy(state, sizeof(state), "1v1 duel");
-		case State_Movement:   strcopy(state, sizeof(state), "Running");
 		default:               strcopy(state, sizeof(state), "Idle");
 	}
 
@@ -1746,19 +1592,6 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
-	if (g_State == State_Movement)
-	{
-		int mover = GetClientOfUserId(event.GetInt("userid"));
-		if (mover > 0)
-		{
-			SetEntProp(mover, Prop_Data, "m_CollisionGroup", 2); // pass through other players
-			ResetMapProgress(mover); // a spawn is a fresh start on the map
-			g_HaveLast[mover] = false;
-			g_IgnoreJump[mover] = 16;
-			CreateTimer(0.1, Timer_SurfSpawn, GetClientUserId(mover), TIMER_FLAG_NO_MAPCHANGE);
-		}
-		return;
-	}
 	if (g_State != State_Knife)
 		return;
 	int userid = event.GetInt("userid");
@@ -1804,7 +1637,7 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 				GetCvarInt("game_mode"), GetClientCount(true));
 			CreateTimer(3.0, Timer_RecoverWarmup, _, TIMER_FLAG_NO_MAPCHANGE);
 		}
-		else if (g_State == State_Practice || g_State == State_Movement || g_State == State_Arena
+		else if (g_State == State_Practice || g_State == State_Arena
 			|| g_State == State_Duel || g_AimBotzNext)
 		{
 			LogMessage("Unexpected game end in practice-type mode (state %d): mp_timelimit=%d mp_maxrounds=%d mp_winlimit=%d game_type=%d game_mode=%d",
@@ -1852,7 +1685,7 @@ public Action Timer_RecoverPractice(Handle timer)
 
 public Action Timer_RecoverWarmup(Handle timer)
 {
-	if (g_State == State_Live || g_State == State_Duel || g_State == State_Arena || g_State == State_Movement || g_State == State_Practice)
+	if (g_State == State_Live || g_State == State_Duel || g_State == State_Arena || g_State == State_Practice)
 		return Plugin_Stop;
 	Announce("The game tried to end the match before it started — back to warmup.");
 	ServerCommand("mp_restartgame 1");
@@ -1910,17 +1743,16 @@ void Cmd_Duel(int client, const char[] arg)
 		return;
 	}
 
+	// Order: gun -> rounds -> headshots only -> opponent.
+	g_PickOpponent[client] = 0;
 	if (arg[0] != '\0')
 	{
 		int target = FindDuelTarget(client, arg);
-		if (target > 0)
-		{
-			g_PickOpponent[client] = GetClientUserId(target);
-			ShowDuelWeaponMenu(client);
-		}
-		return;
+		if (target <= 0)
+			return;
+		g_PickOpponent[client] = GetClientUserId(target); // opponent already chosen
 	}
-	ShowDuelOpponentMenu(client);
+	ShowDuelWeaponMenu(client);
 }
 
 int FindDuelTarget(int client, const char[] name)
@@ -1948,7 +1780,8 @@ int FindDuelTarget(int client, const char[] name)
 void ShowDuelOpponentMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelOpponent);
-	menu.SetTitle("1v1 duel — choose your opponent");
+	menu.SetTitle("1v1 duel — step 4 of 4: choose your opponent\n%s, first to %d%s", g_DuelWepName[g_PickWeapon[client]],
+		g_PickTarget[client], g_PickHs[client] ? ", headshots only" : "");
 	char info[16], name[MAX_NAME_LENGTH];
 	int count = 0;
 	for (int i = 1; i <= MaxClients; i++)
@@ -1966,7 +1799,8 @@ void ShowDuelOpponentMenu(int client)
 		Reply(client, "Nobody else is on the server to duel.");
 		return;
 	}
-	menu.Display(client, 30);
+	menu.ExitBackButton = true;
+	menu.Display(client, 60);
 }
 
 public int Handler_DuelOpponent(Menu menu, MenuAction action, int client, int item)
@@ -1980,7 +1814,11 @@ public int Handler_DuelOpponent(Menu menu, MenuAction action, int client, int it
 		char info[16];
 		menu.GetItem(item, info, sizeof(info));
 		g_PickOpponent[client] = StringToInt(info);
-		ShowDuelWeaponMenu(client);
+		SendChallenge(client, GetClientOfUserId(g_PickOpponent[client]), g_PickWeapon[client], g_PickTarget[client], g_PickHs[client]);
+	}
+	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+	{
+		ShowDuelHsMenu(client);
 	}
 	return 0;
 }
@@ -1988,14 +1826,15 @@ public int Handler_DuelOpponent(Menu menu, MenuAction action, int client, int it
 void ShowDuelWeaponMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelWeapon);
-	menu.SetTitle("1v1 duel — weapon");
+	menu.SetTitle("1v1 duel — step 1 of 4: gun");
 	char info[8];
 	for (int i = 0; i < DUEL_WEAPONS; i++)
 	{
 		IntToString(i, info, sizeof(info));
 		menu.AddItem(info, g_DuelWepName[i]);
 	}
-	menu.Display(client, 30);
+	menu.ExitBackButton = true;
+	menu.Display(client, 60);
 }
 
 public int Handler_DuelWeapon(Menu menu, MenuAction action, int client, int item)
@@ -2011,18 +1850,23 @@ public int Handler_DuelWeapon(Menu menu, MenuAction action, int client, int item
 		g_PickWeapon[client] = StringToInt(info);
 		ShowDuelTargetMenu(client);
 	}
+	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+	{
+		Cmd_OneVOneMenu(client, "");
+	}
 	return 0;
 }
 
 void ShowDuelTargetMenu(int client)
 {
 	Menu menu = new Menu(Handler_DuelTarget);
-	menu.SetTitle("1v1 duel — first to how many kills?");
-	menu.AddItem("5", "5 kills");
-	menu.AddItem("10", "10 kills");
-	menu.AddItem("16", "16 kills");
-	menu.AddItem("25", "25 kills");
-	menu.Display(client, 30);
+	menu.SetTitle("1v1 duel — step 2 of 4: rounds\n%s — first to how many kills?", g_DuelWepName[g_PickWeapon[client]]);
+	menu.AddItem("5", "First to 5");
+	menu.AddItem("10", "First to 10");
+	menu.AddItem("16", "First to 16");
+	menu.AddItem("25", "First to 25");
+	menu.ExitBackButton = true;
+	menu.Display(client, 60);
 }
 
 public int Handler_DuelTarget(Menu menu, MenuAction action, int client, int item)
@@ -2035,12 +1879,52 @@ public int Handler_DuelTarget(Menu menu, MenuAction action, int client, int item
 	{
 		char info[8];
 		menu.GetItem(item, info, sizeof(info));
-		SendChallenge(client, GetClientOfUserId(g_PickOpponent[client]), g_PickWeapon[client], StringToInt(info));
+		g_PickTarget[client] = StringToInt(info);
+		ShowDuelHsMenu(client);
+	}
+	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+	{
+		ShowDuelWeaponMenu(client);
 	}
 	return 0;
 }
 
-void SendChallenge(int from, int to, int weapon, int target)
+void ShowDuelHsMenu(int client)
+{
+	bool knives = StrEqual(g_DuelWepCls[g_PickWeapon[client]], "knife");
+	Menu menu = new Menu(Handler_DuelHs);
+	menu.SetTitle("1v1 duel — step 3 of 4: headshots only?\n%s, first to %d", g_DuelWepName[g_PickWeapon[client]], g_PickTarget[client]);
+	menu.AddItem("0", "Normal — every hit counts");
+	menu.AddItem("1", knives ? "Headshots only (not with knives)" : "Headshots only", knives ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+	menu.ExitBackButton = true;
+	menu.Display(client, 60);
+}
+
+public int Handler_DuelHs(Menu menu, MenuAction action, int client, int item)
+{
+	if (action == MenuAction_End)
+	{
+		delete menu;
+	}
+	else if (action == MenuAction_Select)
+	{
+		char info[8];
+		menu.GetItem(item, info, sizeof(info));
+		g_PickHs[client] = StrEqual(info, "1");
+		int opp = GetClientOfUserId(g_PickOpponent[client]);
+		if (opp > 0 && IsClientInGame(opp))
+			SendChallenge(client, opp, g_PickWeapon[client], g_PickTarget[client], g_PickHs[client]);
+		else
+			ShowDuelOpponentMenu(client);
+	}
+	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+	{
+		ShowDuelTargetMenu(client);
+	}
+	return 0;
+}
+
+void SendChallenge(int from, int to, int weapon, int target, bool hs)
 {
 	if (!CanStartDuel(from))
 		return;
@@ -2059,14 +1943,15 @@ void SendChallenge(int from, int to, int weapon, int target)
 	g_ChalTo = GetClientUserId(to);
 	g_ChalWeapon = weapon;
 	g_ChalTarget = target;
+	g_ChalHs = hs;
 	delete g_ChalTimer;
 	g_ChalTimer = CreateTimer(30.0, Timer_ChallengeExpire, _, TIMER_FLAG_NO_MAPCHANGE);
 
-	Announce("%N challenged %N to a 1v1: \x04%s\x01, first to \x04%d\x01.", from, to, g_DuelWepName[weapon], target);
+	Announce("%N challenged %N to a 1v1: \x04%s\x01, first to \x04%d\x01%s.", from, to, g_DuelWepName[weapon], target, hs ? ", \x02headshots only\x01" : "");
 	PrintToChat(to, "%sType \x04!accept\x01 or \x04!decline\x01 (30 seconds).", PREFIX);
 
 	Menu menu = new Menu(Handler_DuelAnswer);
-	menu.SetTitle("%N challenges you to a 1v1\n%s, first to %d kills", from, g_DuelWepName[weapon], target);
+	menu.SetTitle("%N challenges you to a 1v1\n%s, first to %d kills%s", from, g_DuelWepName[weapon], target, hs ? "\nHeadshots only" : "");
 	menu.AddItem("yes", "Accept");
 	menu.AddItem("no", "Decline");
 	menu.ExitButton = false;
@@ -2136,11 +2021,12 @@ void Cmd_DuelAnswer(int client, bool accept)
 	}
 
 	int weapon = g_ChalWeapon, target = g_ChalTarget;
+	bool hs = g_ChalHs;
 	ClearChallenge();
-	StartDuel(from, client, weapon, target);
+	StartDuel(from, client, weapon, target, hs);
 }
 
-void StartDuel(int a, int b, int weapon, int target)
+void StartDuel(int a, int b, int weapon, int target, bool hs)
 {
 	ResetMatch();
 	StopDemo();
@@ -2153,6 +2039,7 @@ void StartDuel(int a, int b, int weapon, int target)
 	g_DuelScoreB = 0;
 	g_DuelWeapon = weapon;
 	g_DuelTarget = target;
+	g_DuelHs = hs && !StrEqual(g_DuelWepCls[weapon], "knife");
 	g_DuelRoundOver = true;   // team changes below kill players; don't count those
 	g_DuelPlaced = false;
 
@@ -2496,7 +2383,7 @@ void UpdateDuelScore()
 	CS_SetTeamScore(CS_TEAM_CT, g_DuelScoreB);
 	SetTeamScore(CS_TEAM_CT, g_DuelScoreB);
 
-	PrintHintTextToAll("%N  %d - %d  %N\nFirst to %d", a, g_DuelScoreA, g_DuelScoreB, b, g_DuelTarget);
+	PrintHintTextToAll("%N  %d - %d  %N\nFirst to %d%s", a, g_DuelScoreA, g_DuelScoreB, b, g_DuelTarget, g_DuelHs ? " · headshots only" : "");
 }
 
 void Cmd_EndDuel(int client)
@@ -2676,18 +2563,15 @@ enum
 	GM_ArmsRace,
 	GM_Demolition,
 	GM_Practice,
-	GM_KZ,
-	GM_Bhop,
-	GM_Surf,
 	GM_1v1Match,
 	GM_Arena,
 	GM_AimBotz,
 	GM_COUNT
 };
 
-char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "KZ (climb)", "Bhop", "Surf", "1v1 match", "Multi-1v1 arenas", "Aim Botz (solo training)" };
-int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 };
-int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "1v1 match", "Multi-1v1 arenas", "Aim Botz (solo training)" };
+int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0 };
+int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 1, 0, 0 };
 // Each mode has its own map folder: csgo/maps/modes/<folder>/
 // Standard maps written to maps/modes/<folder>/maplist.txt if that file is missing.
 char g_GmDefaultMaps[GM_COUNT][] =
@@ -2699,14 +2583,11 @@ char g_GmDefaultMaps[GM_COUNT][] =
 	"ar_baggage ar_shoots ar_monastery ar_pool_day",
 	"de_lake de_safehouse de_bank de_shortnuke",
 	"de_mirage de_inferno de_dust2 de_nuke de_ancient",
-	"kz_experiment kz_exps_cursedjourney",
-	"bhop_xof bhop_skyruins bhop_zygos",
-	"surf_utopia_v3 surf_mesa_revo_go surf_mai_redone_csgo",
 	"de_shortdust de_lake de_shortnuke gd_rialto",
 	"am_inferno_banana_dolnma am_walterv2",
 	"training_aim_csgo2"
 };
-char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "kz", "bhop", "surf", "1v1", "arena", "aimbotz" };
+char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "1v1", "arena", "aimbotz" };
 
 char g_MapPool[][] =
 {
@@ -2731,8 +2612,6 @@ int CurrentMode()
 {
 	if (g_State == State_Practice || g_PracticeNext)
 		return GM_Practice;
-	if (g_MoveModeNext != MOVE_NONE)
-		return GM_KZ + g_MoveModeNext - MOVE_KZ;
 	if (g_AimBotzNext)
 		return GM_AimBotz;
 	if (g_ArenaNext)
@@ -2766,7 +2645,7 @@ bool IsWingman()
 // Modes where the ready-up / knife / live match flow runs.
 bool IsMatchMode()
 {
-	if (g_MoveModeNext != MOVE_NONE || g_ArenaNext || g_AimBotzNext)
+	if (g_ArenaNext || g_AimBotzNext)
 		return false;
 	if (GetCvarInt("game_type") != 0)
 		return false;
@@ -2776,16 +2655,10 @@ bool IsMatchMode()
 
 void ApplyModeOnMapStart()
 {
-	g_MoveMode = MOVE_NONE;
 	SeriesOnMapStart();
 	if (g_PracticeNext)
 	{
 		EnterPractice();
-		return;
-	}
-	if (g_MoveModeNext != MOVE_NONE)
-	{
-		EnterMovement(g_MoveModeNext);
 		return;
 	}
 	if (g_ArenaNext)
@@ -2879,7 +2752,6 @@ void ShowGameModeMenu(int client)
 			StrCat(line, sizeof(line), " (ready-up match)");
 		menu.AddItem(info, line);
 	}
-	menu.AddItem("duel", "1v1 aim duel (challenge a player)");
 	menu.AddItem("options", "Match options...");
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -2894,11 +2766,6 @@ public int Handler_GameMode(Menu menu, MenuAction action, int client, int item)
 	{
 		char info[16];
 		menu.GetItem(item, info, sizeof(info));
-		if (StrEqual(info, "duel"))
-		{
-			Cmd_Duel(client, "");
-			return 0;
-		}
 		if (StrEqual(info, "options"))
 		{
 			ShowOptionsMenu(client);
@@ -2931,7 +2798,7 @@ void ShowModeMapMenu(int client)
 
 	char currentName[PLATFORM_MAX_PATH];
 	GetMapDisplayName(current, currentName, sizeof(currentName));
-	bool mapSpecific = (gm == GM_KZ || gm == GM_Bhop || gm == GM_Surf || gm == GM_Arena || gm == GM_AimBotz);
+	bool mapSpecific = (gm == GM_Arena || gm == GM_AimBotz);
 	char folderPrefix[PLATFORM_MAX_PATH];
 	Format(folderPrefix, sizeof(folderPrefix), "modes/%s/", g_GmFolder[gm]);
 	if (!mapSpecific || HasMovePrefix(currentName, gm) || StrContains(current, folderPrefix, false) == 0)
@@ -2963,7 +2830,7 @@ void ShowModeMapMenu(int client)
 			AddMapItem(menu, g_DemolitionMaps[i], seen);
 	}
 
-	if (gm == GM_KZ || gm == GM_Bhop || gm == GM_Surf || gm == GM_Arena || gm == GM_AimBotz)
+	if (gm == GM_Arena || gm == GM_AimBotz)
 	{
 		// Only maps made for the mode; normal maps make no sense here.
 		int found = folderMaps + AddPrefixedMaps(menu, gm, seen);
@@ -3040,13 +2907,11 @@ public Action Timer_SwitchMode(Handle timer)
 	strcopy(g_SwitchMap, sizeof(g_SwitchMap), target);
 
 	g_PracticeNext = (gm == GM_Practice);
-	int newMove = (gm >= GM_KZ && gm <= GM_Surf) ? (MOVE_KZ + gm - GM_KZ) : MOVE_NONE;
-	if ((g_MoveModeNext != MOVE_NONE && newMove == MOVE_NONE) || (g_ArenaNext && gm != GM_Arena)
+	if ((g_ArenaNext && gm != GM_Arena)
 		|| (g_AimBotzNext && gm != GM_AimBotz))
 		ResetMovementCvars();
 	if (g_AimBotzNext && gm != GM_AimBotz)
 		ResetAimBotzCvars();
-	g_MoveModeNext = newMove;
 	g_OneVOneNext = (gm == GM_1v1Match);
 	g_ArenaNext = (gm == GM_Arena);
 	g_AimBotzNext = (gm == GM_AimBotz);
@@ -3295,28 +3160,13 @@ void LoadSavedOptions()
 }
 
 /* ------------------------------------------------------------------ */
-/*  KZ / Bhop / Surf                                                  */
+/*  Map lists per mode                                                */
 /* ------------------------------------------------------------------ */
 
 void GetMovePrefixes(int gm, char prefixes[4][16], int &count)
 {
 	count = 0;
-	if (gm == GM_KZ)
-	{
-		strcopy(prefixes[count++], 16, "kz_");
-		strcopy(prefixes[count++], 16, "kzpro_");
-		strcopy(prefixes[count++], 16, "bkz_");
-		strcopy(prefixes[count++], 16, "xc_");
-	}
-	else if (gm == GM_Bhop)
-	{
-		strcopy(prefixes[count++], 16, "bhop_");
-	}
-	else if (gm == GM_Surf)
-	{
-		strcopy(prefixes[count++], 16, "surf_");
-	}
-	else if (gm == GM_Arena)
+	if (gm == GM_Arena)
 	{
 		strcopy(prefixes[count++], 16, "am_");
 		strcopy(prefixes[count++], 16, "1v1_");
@@ -3407,7 +3257,7 @@ int AddWorkshopMaps(Menu menu, int gm, StringMap seen)
 
 int TryAddMap(Menu menu, const char[] map, StringMap seen)
 {
-	// Show "surf_mesa" rather than "workshop/123/surf_mesa" or "modes/surf/surf_mesa".
+	// Show "am_walterv2" rather than "workshop/123/am_walterv2" or "modes/arena/am_walterv2".
 	char display[PLATFORM_MAX_PATH];
 	int slash = FindCharInString(map, '/', true);
 	strcopy(display, sizeof(display), map[slash + 1]);
@@ -3614,264 +3464,6 @@ int AddFolderMaps(Menu menu, int gm, StringMap seen)
 	return found;
 }
 
-void EnterMovement(int move)
-{
-	DuelCleanup();
-	ResetMatch();
-	StopDemo();
-	g_State = State_Movement;
-	g_MoveMode = move;
-
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		g_CpCount[i] = 0;
-		g_CpIndex[i] = 0;
-	}
-
-	char cfg[16];
-	switch (move)
-	{
-		case MOVE_KZ:   strcopy(cfg, sizeof(cfg), "kz.cfg");
-		case MOVE_BHOP: strcopy(cfg, sizeof(cfg), "bhop.cfg");
-		default:        strcopy(cfg, sizeof(cfg), "surf.cfg");
-	}
-	ServerCommand("mp_unpause_match");
-	ServerCommand("mp_warmup_end");
-	ServerCommand("exec csgo_match/%s", cfg);
-	NoGameEnd();
-	ServerCommand("mp_restartgame 1");
-	CreateTimer(3.0, Timer_MoveAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
-
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		g_StageCount[i] = 0;
-		g_HasSpawn[i] = false;
-		g_FreshStart[i] = true;
-	}
-	HookSurfTeleports();
-}
-
-public Action Timer_MoveAnnounce(Handle timer)
-{
-	if (g_State != State_Movement)
-		return Plugin_Stop;
-	char mode[32];
-	GetModeName(mode, sizeof(mode));
-	Announce("Game mode: \x04%s\x01. \x04!r\x01 back to start, \x04!cp\x01/\x04!tp\x01 checkpoints, \x04!speed\x01 \x04!hide\x01 \x04!noclip\x01.", mode);
-	return Plugin_Stop;
-}
-
-// Put physics back to normal when leaving KZ/Bhop/Surf (the next map's game mode
-// config sets most of these too; this covers anything it doesn't).
-void ResetMovementCvars()
-{
-	ServerCommand("sv_airaccelerate 12");
-	ServerCommand("sv_accelerate 5.5");
-	ServerCommand("sv_friction 5.2");
-	ServerCommand("sv_enablebunnyhopping 0");
-	ServerCommand("sv_autobunnyhopping 0");
-	ServerCommand("sv_staminajumpcost .080");
-	ServerCommand("sv_staminalandcost .050");
-	ServerCommand("sv_falldamage_scale 1");
-	ServerCommand("mp_ignore_round_win_conditions 0");
-	ServerCommand("mp_respawn_on_death_ct 0");
-	ServerCommand("mp_respawn_on_death_t 0");
-	ServerCommand("mp_respawn_immunitytime 4");
-	ServerCommand("mp_solid_teammates 1");
-	ServerCommand("mp_buy_anywhere 0");
-	ServerCommand("mp_buytime 20");
-	ServerCommand("mp_ct_default_secondary \"weapon_hkp2000\"");
-	ServerCommand("mp_t_default_secondary \"weapon_glock\"");
-}
-
-bool CheckMovement(int client)
-{
-	if (!CheckInGame(client))
-		return false;
-	if (g_State != State_Movement)
-	{
-		Reply(client, "That only works in KZ, Bhop and Surf modes (!gamemode).");
-		return false;
-	}
-	return true;
-}
-
-bool CheckAlive(int client)
-{
-	if (IsPlayerAlive(client))
-		return true;
-	Reply(client, "You need to be alive.");
-	return false;
-}
-
-void Cmd_MoveRestart(int client)
-{
-	if (!CheckMovement(client))
-		return;
-	if (!IsOnPlayingTeam(client))
-	{
-		Reply(client, "Join a team first.");
-		return;
-	}
-	if (GetEntityMoveType(client) == MOVETYPE_NOCLIP)
-		SetEntityMoveType(client, MOVETYPE_WALK);
-	ResetMapProgress(client);
-	g_StageCount[client] = 0;
-	g_FreshStart[client] = true;
-	CS_RespawnPlayer(client);
-}
-
-// Surf/KZ/bhop maps mark which stage you reached by changing your targetname
-// (sometimes classname or gravity); their fail teleports read it to send you
-// back to "your" stage. It survives a respawn, so a fall right after
-// restarting could send you to a later stage. Clear it so a respawn is a
-// real fresh start.
-void ResetMapProgress(int client)
-{
-	if (!IsClientInGame(client))
-		return;
-	DispatchKeyValue(client, "targetname", "");
-	char cls[32];
-	GetEntityClassname(client, cls, sizeof(cls));
-	if (!StrEqual(cls, "player"))
-		DispatchKeyValue(client, "classname", "player");
-	SetEntityGravity(client, 1.0);
-	SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", 1.0);
-}
-
-void Cmd_Checkpoint(int client)
-{
-	if (!CheckMovement(client) || !CheckAlive(client))
-		return;
-
-	int n = g_CpCount[client];
-	if (n >= MAX_CPS)
-	{
-		// Drop the oldest.
-		for (int i = 1; i < MAX_CPS; i++)
-		{
-			g_CpPos[client][i - 1] = g_CpPos[client][i];
-			g_CpAng[client][i - 1] = g_CpAng[client][i];
-		}
-		n = MAX_CPS - 1;
-	}
-	GetClientAbsOrigin(client, g_CpPos[client][n]);
-	GetClientEyeAngles(client, g_CpAng[client][n]);
-	g_CpCount[client] = n + 1;
-	g_CpIndex[client] = n;
-
-	if (g_MoveMode == MOVE_KZ && !(GetEntityFlags(client) & FL_ONGROUND))
-		Reply(client, "Checkpoint #%d saved (in the air).", n + 1);
-	else
-		Reply(client, "Checkpoint #%d saved.", n + 1);
-}
-
-void Cmd_TeleportCp(int client, int step)
-{
-	if (!CheckMovement(client) || !CheckAlive(client))
-		return;
-	if (g_CpCount[client] == 0)
-	{
-		Reply(client, "No checkpoints yet — type \x04!cp\x01 to save one.");
-		return;
-	}
-
-	int idx = g_CpIndex[client] + step;
-	if (idx < 0)
-		idx = 0;
-	if (idx >= g_CpCount[client])
-		idx = g_CpCount[client] - 1;
-	g_CpIndex[client] = idx;
-
-	if (GetEntityMoveType(client) == MOVETYPE_NOCLIP)
-		SetEntityMoveType(client, MOVETYPE_WALK);
-
-	float zero[3];
-	g_IgnoreJump[client] = 16;
-	TeleportEntity(client, g_CpPos[client][idx], g_CpAng[client][idx], zero);
-	if (step != 0)
-		PrintHintText(client, "Checkpoint %d / %d", idx + 1, g_CpCount[client]);
-}
-
-void Cmd_ToggleSpeed(int client)
-{
-	if (!CheckMovement(client))
-		return;
-	g_ShowSpeed[client] = !g_ShowSpeed[client];
-	Reply(client, "Speedometer %s.", g_ShowSpeed[client] ? "on" : "off");
-}
-
-void Cmd_ToggleHide(int client)
-{
-	if (!CheckMovement(client))
-		return;
-	g_HidePlayers[client] = !g_HidePlayers[client];
-	Reply(client, "Other players are now %s.", g_HidePlayers[client] ? "hidden" : "visible");
-}
-
-void Cmd_Noclip(int client)
-{
-	if (!CheckMovement(client) || !CheckAlive(client))
-		return;
-	if (GetEntityMoveType(client) == MOVETYPE_NOCLIP)
-	{
-		SetEntityMoveType(client, MOVETYPE_WALK);
-		Reply(client, "Noclip off.");
-	}
-	else
-	{
-		SetEntityMoveType(client, MOVETYPE_NOCLIP);
-		Reply(client, "Noclip on — type \x04!noclip\x01 again to stop.");
-	}
-}
-
-public Action Timer_Speedometer(Handle timer)
-{
-	if (g_State != State_Movement)
-		return Plugin_Continue;
-
-	float vel[3];
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientInGame(i) || IsFakeClient(i) || !g_ShowSpeed[i])
-			continue;
-
-		int target = i;
-		if (!IsPlayerAlive(i))
-		{
-			int mode = GetEntProp(i, Prop_Send, "m_iObserverMode");
-			target = GetEntPropEnt(i, Prop_Send, "m_hObserverTarget");
-			if ((mode != 4 && mode != 5) || target <= 0 || target > MaxClients || !IsClientInGame(target) || !IsPlayerAlive(target))
-				continue;
-		}
-
-		GetEntPropVector(target, Prop_Data, "m_vecVelocity", vel);
-		float speed = SquareRoot(vel[0] * vel[0] + vel[1] * vel[1]);
-		if (target == i)
-			PrintHintText(i, "%.0f u/s", speed);
-		else
-			PrintHintText(i, "%N\n%.0f u/s", target, speed);
-	}
-	return Plugin_Continue;
-}
-
-// No player-on-player damage in KZ/Bhop/Surf. Map damage (trigger_hurt) still works.
-public Action Hook_MoveTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
-{
-	if (g_State == State_Movement && attacker >= 1 && attacker <= MaxClients && attacker != victim)
-		return Plugin_Handled;
-	return Plugin_Continue;
-}
-
-// !hide: don't send other players to someone who has hidden them.
-public Action Hook_MoveTransmit(int entity, int viewer)
-{
-	if (g_State != State_Movement || entity == viewer || viewer < 1 || viewer > MaxClients)
-		return Plugin_Continue;
-	if (g_HidePlayers[viewer] && IsPlayerAlive(viewer))
-		return Plugin_Handled;
-	return Plugin_Continue;
-}
 
 /* ------------------------------------------------------------------ */
 /*  !1v1 menu — every 1v1 mode in one place                           */
@@ -3893,7 +3485,7 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 
 	Menu menu = new Menu(Handler_OneVOne);
 	menu.SetTitle("1v1 modes\nNow: %s", mode);
-	menu.AddItem("duel", "Aim duel — challenge a player (anyone)");
+	menu.AddItem("duel", "!duel — pick gun, rounds, headshots only, then an opponent");
 	menu.AddItem("match", admin ? "1v1 match — ready-up MR15, one per side" : "1v1 match (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	menu.AddItem("arena", admin ? "Multi-1v1 arenas — ladder on am_ maps" : "Multi-1v1 arenas (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	if (g_State == State_Arena)
@@ -3922,6 +3514,20 @@ public int Handler_OneVOne(Menu menu, MenuAction action, int client, int item)
 		}
 	}
 	return 0;
+}
+
+// Undo practice-type settings (arena / Aim Botz) when switching to another mode.
+void ResetMovementCvars()
+{
+	ServerCommand("mp_ignore_round_win_conditions 0");
+	ServerCommand("mp_respawn_on_death_ct 0");
+	ServerCommand("mp_respawn_on_death_t 0");
+	ServerCommand("mp_respawn_immunitytime 4");
+	ServerCommand("mp_solid_teammates 1");
+	ServerCommand("mp_buy_anywhere 0");
+	ServerCommand("mp_buytime 20");
+	ServerCommand("mp_ct_default_secondary \"weapon_hkp2000\"");
+	ServerCommand("mp_t_default_secondary \"weapon_glock\"");
 }
 
 /* ------------------------------------------------------------------ */
@@ -5298,11 +4904,8 @@ void WriteDefaultConfigs()
 	WriteDefaultCfg("prac.cfg", g_CfgPrac, sizeof(g_CfgPrac));
 	WriteDefaultCfg("duel.cfg", g_CfgDuel, sizeof(g_CfgDuel));
 	WriteDefaultCfg("wingman.cfg", g_CfgWingman, sizeof(g_CfgWingman));
-	WriteDefaultCfg("kz.cfg", g_CfgKZ, sizeof(g_CfgKZ));
 	WriteDefaultCfg("1v1.cfg", g_Cfg1v1, sizeof(g_Cfg1v1));
 	WriteDefaultCfg("arena.cfg", g_CfgArena, sizeof(g_CfgArena));
-	WriteDefaultCfg("bhop.cfg", g_CfgBhop, sizeof(g_CfgBhop));
-	WriteDefaultCfg("surf.cfg", g_CfgSurf, sizeof(g_CfgSurf));
 	WriteDefaultCfg("aimbotz.cfg", g_CfgAimBotz, sizeof(g_CfgAimBotz));
 }
 
@@ -5876,7 +5479,7 @@ void SeriesOnMapStart()
 		return;
 	char current[PLATFORM_MAX_PATH];
 	GetCurrentMap(current, sizeof(current));
-	if (!SameMap(current, g_SeriesMaps[g_SeriesMapIndex]) || g_PracticeNext || g_MoveModeNext != MOVE_NONE
+	if (!SameMap(current, g_SeriesMaps[g_SeriesMapIndex]) || g_PracticeNext
 		|| g_ArenaNext || g_OneVOneNext || g_AimBotzNext)
 	{
 		LogMessage("Best-of-3 series cancelled: %s was loaded instead of %s.", current, g_SeriesMaps[g_SeriesMapIndex]);
@@ -6163,145 +5766,14 @@ void Cmd_AimBotz(int client)
 }
 
 
-/* ------------------------------------------------------------------ */
-/*  Surf: falling = back to start, unless a stage was finished         */
-/* ------------------------------------------------------------------ */
-// Surf maps don't say where a stage ends, so this follows the map's own
-// teleports: a teleport that lands you somewhere you've already been (the
-// start, or a stage start you reached) is a fall; one that takes you
-// somewhere new is the next stage.
-
-public void OnEntityCreated(int entity, const char[] classname)
+// Headshots-only duels: hits anywhere but the head do nothing.
+public Action Hook_DuelTraceAttack(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &ammotype, int hitbox, int hitgroup)
 {
-	// Round restarts recreate the map's teleports, so hook each new one.
-	if (StrEqual(classname, "trigger_teleport"))
-		SDKHook(entity, SDKHook_StartTouchPost, Hook_SurfTeleportTouch);
-}
-
-void HookSurfTeleports()
-{
-	int ent = -1;
-	while ((ent = FindEntityByClassname(ent, "trigger_teleport")) != -1)
-	{
-		SDKUnhook(ent, SDKHook_StartTouchPost, Hook_SurfTeleportTouch); // never hook twice
-		SDKHook(ent, SDKHook_StartTouchPost, Hook_SurfTeleportTouch);
-	}
-}
-
-bool SurfAutoOn()
-{
-	return g_State == State_Movement && g_MoveMode == MOVE_SURF && g_cvSurfAutoRestart.BoolValue;
-}
-
-public void Hook_SurfTeleportTouch(int trigger, int other)
-{
-	if (other < 1 || other > MaxClients || !SurfAutoOn() || !IsClientInGame(other) || !IsPlayerAlive(other))
-		return;
-	if (g_TeleportPending[other])
-		return;
-	g_TeleportPending[other] = true;
-	// The map moves the player during Touch; look where they ended up.
-	CreateTimer(0.1, Timer_SurfAfterTeleport, GetClientUserId(other), TIMER_FLAG_NO_MAPCHANGE);
-}
-
-public Action Timer_SurfSpawn(Handle timer, int userid)
-{
-	int client = GetClientOfUserId(userid);
-	if (client <= 0 || !IsClientInGame(client) || !IsPlayerAlive(client) || g_State != State_Movement)
-		return Plugin_Stop;
-
-	if (g_FreshStart[client] || !g_HasSpawn[client] || g_StageCount[client] == 0 || !SurfAutoOn())
-	{
-		// A real start: remember where the map starts.
-		GetClientAbsOrigin(client, g_SpawnPos[client]);
-		GetClientEyeAngles(client, g_SpawnAng[client]);
-		g_HasSpawn[client] = true;
-		g_FreshStart[client] = false;
-		return Plugin_Stop;
-	}
-	// Died after finishing a stage: back to that stage.
-	int s = g_StageCount[client] - 1;
-	g_IgnoreJump[client] = 16;
-	TeleportEntity(client, g_StagePos[client][s], g_StageAng[client][s], view_as<float>({0.0, 0.0, 0.0}));
-	return Plugin_Stop;
-}
-
-public Action Timer_SurfAfterTeleport(Handle timer, int userid)
-{
-	int client = GetClientOfUserId(userid);
-	if (client <= 0)
-		return Plugin_Stop;
-	g_TeleportPending[client] = false;
-	if (!IsClientInGame(client) || !IsPlayerAlive(client) || !SurfAutoOn() || !g_HasSpawn[client])
-		return Plugin_Stop;
-
-	float pos[3], ang[3];
-	GetClientAbsOrigin(client, pos);
-	GetClientEyeAngles(client, ang);
-
-	// Somewhere new = the next stage.
-	bool known = GetVectorDistance(pos, g_SpawnPos[client]) < SURF_NEAR;
-	for (int i = 0; i < g_StageCount[client] && !known; i++)
-		known = GetVectorDistance(pos, g_StagePos[client][i]) < SURF_NEAR;
-
-	if (!known)
-	{
-		if (g_StageCount[client] < SURF_MAX_STAGES)
-		{
-			int s = g_StageCount[client]++;
-			g_StagePos[client][s] = pos;
-			g_StageAng[client][s] = ang;
-		}
-		PrintHintText(client, "Stage %d reached", g_StageCount[client] + 1);
-		return Plugin_Stop;
-	}
-
-	// A fall: back to the start, or to the last stage reached.
-	float zero[3];
-	if (g_StageCount[client] == 0)
-	{
-		g_IgnoreJump[client] = 16;
-		TeleportEntity(client, g_SpawnPos[client], g_SpawnAng[client], zero);
-		ResetMapProgress(client);
-	}
-	else
-	{
-		int s = g_StageCount[client] - 1;
-		if (GetVectorDistance(pos, g_StagePos[client][s]) > 64.0)
-		{
-			g_IgnoreJump[client] = 16;
-			TeleportEntity(client, g_StagePos[client][s], g_StageAng[client][s], zero);
-		}
-	}
-	return Plugin_Stop;
-}
-
-// Catch every map teleport, not only trigger_teleport (some maps move you with
-// point_teleport or outputs): a position jump far bigger than the player's
-// speed can explain is a teleport.
-public void OnPlayerRunCmdPost(int client, int buttons, int impulse, const float vel[3], const float angles[3],
-	int weapon, int subtype, int cmdnum, int tickcount, int seed, const int mouse[2])
-{
-	if (!SurfAutoOn() || IsFakeClient(client) || !IsPlayerAlive(client) || GetEntityMoveType(client) == MOVETYPE_NOCLIP)
-	{
-		g_HaveLast[client] = false;
-		return;
-	}
-	float pos[3];
-	GetClientAbsOrigin(client, pos);
-	if (g_HaveLast[client] && g_IgnoreJump[client] == 0 && !g_TeleportPending[client])
-	{
-		float v[3];
-		GetEntPropVector(client, Prop_Data, "m_vecAbsVelocity", v);
-		float expected = GetVectorLength(v) * GetTickInterval() * 3.0 + 150.0;
-		if (GetVectorDistance(pos, g_LastPos[client]) > expected)
-		{
-			g_TeleportPending[client] = true;
-			CreateTimer(0.1, Timer_SurfAfterTeleport, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
-		}
-	}
-	if (g_IgnoreJump[client] > 0)
-		g_IgnoreJump[client]--;
-	g_LastPos[client] = pos;
-	g_HaveLast[client] = true;
+	if (g_State != State_Duel || !g_DuelHs)
+		return Plugin_Continue;
+	if (attacker < 1 || attacker > MaxClients || attacker == victim)
+		return Plugin_Continue;
+	if (hitgroup == 1) // head
+		return Plugin_Continue;
+	return Plugin_Handled;
 }

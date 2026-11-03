@@ -3,7 +3,7 @@
 A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on Windows** into a full community/match server. It includes:
 
 - **Metamod and SourceMod**, preconfigured.
-- **CS:GO Match**, a match system: ready-up, knife round, pauses, best-of-3 with map veto, every game mode, KZ/Bhop/Surf and all 1v1 modes.
+- **CS:GO Match**, a match system: ready-up, knife round, pauses, best-of-3 with map veto, every game mode, Aim Botz training and all 1v1 modes.
 - **CS:GO Loadout**, a skin system: skins, stickers, knives, gloves, agents, patches and default-weapon picks, saved per player.
 - **Helpers**: a first-run setup wizard, a crash-restarting launcher, FastDL map downloads, a community map downloader, and the internet-play fixes from [FNScence/CSGO-Legacy-Server](https://github.com/FNScence/CSGO-Legacy-Server).
 
@@ -116,7 +116,7 @@ Close the server before running it. It lists everything and asks first. By defau
 
 ## Community maps: `download_community_maps.bat`
 
-This downloads the KZ, Bhop, Surf, arena and Aim Botz maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
+This downloads the arena and Aim Botz maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
 
 ---
 
@@ -133,7 +133,6 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Deathmatch / Arms Race / Demolition | the game's own rules |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
-| KZ / Bhop / Surf | movement physics per mode, checkpoints, speedometer |
 | 1v1 match | ready-up 1v1, one player per side |
 | Multi-1v1 arenas | arena ladder on `am_` / `1v1_` maps |
 | Aim Botz (solo training) | `training_aim_csgo2`: the map's buttons control the bots. Infinite ammo, buy anywhere, no round end. `!aimbotz` jumps straight to it. |
@@ -180,14 +179,15 @@ Also included: SourceTV demo recording per match and round backups.
 - Settings: `cfg/csgo_match/aimbotz.cfg`.
 - Map: `download_community_maps.bat` downloads it straight from the Steam Workshop (id 243702660) through Steam's public file API. If that fails, copy `csgo/maps/workshop/243702660/training_aim_csgo2.bsp` from a CS:GO Legacy client subscribed to the Workshop map.
 
-### KZ / Bhop / Surf
-`!r` `!cp` `!tp` `!pcp` `!ncp` `!speed` `!hide` `!noclip`. Instant respawn, no collisions or player damage. These modes have no run timers.
-
-**Surf auto-restart:** falling off sends you back to the start, like `!r`. Once you finish a stage, a fall takes you back to the start of the last stage you reached; "Stage N reached" shows each time you get to a new one. The plugin works out stages from the map's own teleports: landing somewhere new counts as the next stage, landing somewhere you've been counts as a fall. Spawns and `!r` also clear the stage markers maps put on players, so a fresh start really is the start. Turn it off with `match_surf_auto_restart 0`.
-
 ### 1v1
 - `!1v1` opens a menu with every 1v1 mode.
-- **Aim duel**: `!duel [name]`, pick a weapon and kills to win, then `!accept` / `!decline` / `!forfeit`.
+- **Duel**: `!duel`, also in the `!1v1` menu. You set it up in four steps:
+  1. **gun**: AK, M4A4, M4A1-S, AWP, SSG, Deagle, USP-S, Glock, P250, random each round, or knives
+  2. **rounds**: first to 5, 10, 16 or 25 kills
+  3. **headshots only**, or normal
+  4. **opponent**: anyone on the server
+
+  `!duel <name>` skips step 4. Your opponent answers with `!accept` / `!decline`, and either player can `!forfeit`. In headshots-only duels, hits anywhere but the head do no damage.
 - **Arenas**: `!guns` `!sitout` `!rank`.
 
 ### Admin
