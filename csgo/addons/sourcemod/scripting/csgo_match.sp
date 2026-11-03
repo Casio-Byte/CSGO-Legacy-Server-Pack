@@ -1729,7 +1729,10 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	{
 		int mover = GetClientOfUserId(event.GetInt("userid"));
 		if (mover > 0)
+		{
 			SetEntProp(mover, Prop_Data, "m_CollisionGroup", 2); // pass through other players
+			ResetMapProgress(mover); // a spawn is a fresh start on the map
+		}
 		return;
 	}
 	if (g_State != State_Knife)
@@ -3680,7 +3683,26 @@ void Cmd_MoveRestart(int client)
 	}
 	if (GetEntityMoveType(client) == MOVETYPE_NOCLIP)
 		SetEntityMoveType(client, MOVETYPE_WALK);
+	ResetMapProgress(client);
 	CS_RespawnPlayer(client);
+}
+
+// Surf/KZ/bhop maps mark which stage you reached by changing your targetname
+// (sometimes classname or gravity); their fail teleports read it to send you
+// back to "your" stage. It survives a respawn, so a fall right after
+// restarting could send you to a later stage. Clear it so a respawn is a
+// real fresh start.
+void ResetMapProgress(int client)
+{
+	if (!IsClientInGame(client))
+		return;
+	DispatchKeyValue(client, "targetname", "");
+	char cls[32];
+	GetEntityClassname(client, cls, sizeof(cls));
+	if (!StrEqual(cls, "player"))
+		DispatchKeyValue(client, "classname", "player");
+	SetEntityGravity(client, 1.0);
+	SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", 1.0);
 }
 
 void Cmd_Checkpoint(int client)
@@ -5801,7 +5823,13 @@ public Action Timer_SeriesStartHere(Handle timer)
 public Action Timer_SeriesChangeMap(Handle timer)
 {
 	if (g_SeriesActive)
-		ForceChangeLevel(g_SeriesMaps[g_SeriesMapIndex], "Best of 3");
+	{
+		char target[PLATFORM_MAX_PATH];
+		if (ResolveMap(g_SeriesMaps[g_SeriesMapIndex], target, sizeof(target)))
+			ForceChangeLevel(target, "Best of 3");
+		else
+			Announce("\x02Can't load %s - it isn't installed on the server. Use !endseries.", g_SeriesMaps[g_SeriesMapIndex]);
+	}
 	return Plugin_Stop;
 }
 
