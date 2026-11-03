@@ -156,6 +156,18 @@ bool g_PracticeNext = false;   // set by !gamemode / !prac so practice survives 
 #define MAX_CPS   20
 int   g_MoveModeNext = MOVE_NONE;   // survives map changes, like g_PracticeNext
 int   g_MoveMode = MOVE_NONE;       // active this map
+// Surf auto-restart: falls go back to the start, or to the last stage reached.
+#define SURF_MAX_STAGES 48
+#define SURF_NEAR 700.0
+ConVar g_cvSurfAutoRestart;
+float g_SpawnPos[MAXPLAYERS + 1][3];
+float g_SpawnAng[MAXPLAYERS + 1][3];
+bool  g_HasSpawn[MAXPLAYERS + 1];
+float g_StagePos[MAXPLAYERS + 1][SURF_MAX_STAGES][3];
+float g_StageAng[MAXPLAYERS + 1][SURF_MAX_STAGES][3];
+int   g_StageCount[MAXPLAYERS + 1];
+bool  g_FreshStart[MAXPLAYERS + 1];   // next spawn is a real restart (!r, join)
+bool  g_TeleportPending[MAXPLAYERS + 1];
 float g_CpPos[MAXPLAYERS + 1][MAX_CPS][3];
 float g_CpAng[MAXPLAYERS + 1][MAX_CPS][3];
 int   g_CpCount[MAXPLAYERS + 1];
@@ -643,6 +655,7 @@ public void OnPluginStart()
 	g_cvOvertime      = CreateConVar("match_overtime", "-1", "Overtime: 1 = on, 0 = off, -1 = use live.cfg", _, true, -1.0, true, 1.0);
 	g_cvFriendlyFire  = CreateConVar("match_friendlyfire", "-1", "Friendly fire in matches: 1 = on, 0 = off, -1 = use live.cfg", _, true, -1.0, true, 1.0);
 	g_cvSeries        = CreateConVar("match_series_maps", "1", "Competitive 5v5: 1 = single map, 3 = best of 3 with a map veto (teams vote to ban/pick)", _, true, 1.0, true, 3.0);
+	g_cvSurfAutoRestart = CreateConVar("match_surf_auto_restart", "1", "Surf: falling sends you back to the start, or to the start of the last stage you reached (1 = on)", _, true, 0.0, true, 1.0);
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 
@@ -766,6 +779,9 @@ public void OnClientDisconnect(int client)
 	g_Ready[client] = false;
 	g_CpCount[client] = 0;
 	g_CpIndex[client] = 0;
+	g_StageCount[client] = 0;
+	g_HasSpawn[client] = false;
+	g_FreshStart[client] = true;
 	g_ShowSpeed[client] = true;
 	g_HidePlayers[client] = false;
 	ArenaOnDisconnect(client);
@@ -1732,6 +1748,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 		{
 			SetEntProp(mover, Prop_Data, "m_CollisionGroup", 2); // pass through other players
 			ResetMapProgress(mover); // a spawn is a fresh start on the map
+			CreateTimer(0.1, Timer_SurfSpawn, GetClientUserId(mover), TIMER_FLAG_NO_MAPCHANGE);
 		}
 		return;
 	}
@@ -3617,6 +3634,14 @@ void EnterMovement(int move)
 	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 	CreateTimer(3.0, Timer_MoveAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
+
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		g_StageCount[i] = 0;
+		g_HasSpawn[i] = false;
+		g_FreshStart[i] = true;
+	}
+	HookSurfTeleports();
 }
 
 public Action Timer_MoveAnnounce(Handle timer)
@@ -3684,6 +3709,8 @@ void Cmd_MoveRestart(int client)
 	if (GetEntityMoveType(client) == MOVETYPE_NOCLIP)
 		SetEntityMoveType(client, MOVETYPE_WALK);
 	ResetMapProgress(client);
+	g_StageCount[client] = 0;
+	g_FreshStart[client] = true;
 	CS_RespawnPlayer(client);
 }
 
@@ -6125,4 +6152,113 @@ void Cmd_AimBotz(int client)
 		return;
 	g_PickMode[client] = GM_AimBotz;
 	ShowModeMapMenu(client);
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Surf: falling = back to start, unless a stage was finished         */
+/* ------------------------------------------------------------------ */
+// Surf maps don't say where a stage ends, so this follows the map's own
+// teleports: a teleport that lands you somewhere you've already been (the
+// start, or a stage start you reached) is a fall; one that takes you
+// somewhere new is the next stage.
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	// Round restarts recreate the map's teleports, so hook each new one.
+	if (StrEqual(classname, "trigger_teleport"))
+		SDKHook(entity, SDKHook_StartTouchPost, Hook_SurfTeleportTouch);
+}
+
+void HookSurfTeleports()
+{
+	int ent = -1;
+	while ((ent = FindEntityByClassname(ent, "trigger_teleport")) != -1)
+	{
+		SDKUnhook(ent, SDKHook_StartTouchPost, Hook_SurfTeleportTouch); // never hook twice
+		SDKHook(ent, SDKHook_StartTouchPost, Hook_SurfTeleportTouch);
+	}
+}
+
+bool SurfAutoOn()
+{
+	return g_State == State_Movement && g_MoveMode == MOVE_SURF && g_cvSurfAutoRestart.BoolValue;
+}
+
+public void Hook_SurfTeleportTouch(int trigger, int other)
+{
+	if (other < 1 || other > MaxClients || !SurfAutoOn() || !IsClientInGame(other) || !IsPlayerAlive(other))
+		return;
+	if (g_TeleportPending[other])
+		return;
+	g_TeleportPending[other] = true;
+	// The map moves the player during Touch; look where they ended up.
+	CreateTimer(0.1, Timer_SurfAfterTeleport, GetClientUserId(other), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_SurfSpawn(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client <= 0 || !IsClientInGame(client) || !IsPlayerAlive(client) || g_State != State_Movement)
+		return Plugin_Stop;
+
+	if (g_FreshStart[client] || !g_HasSpawn[client] || g_StageCount[client] == 0 || !SurfAutoOn())
+	{
+		// A real start: remember where the map starts.
+		GetClientAbsOrigin(client, g_SpawnPos[client]);
+		GetClientEyeAngles(client, g_SpawnAng[client]);
+		g_HasSpawn[client] = true;
+		g_FreshStart[client] = false;
+		return Plugin_Stop;
+	}
+	// Died after finishing a stage: back to that stage.
+	int s = g_StageCount[client] - 1;
+	TeleportEntity(client, g_StagePos[client][s], g_StageAng[client][s], view_as<float>({0.0, 0.0, 0.0}));
+	return Plugin_Stop;
+}
+
+public Action Timer_SurfAfterTeleport(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client <= 0)
+		return Plugin_Stop;
+	g_TeleportPending[client] = false;
+	if (!IsClientInGame(client) || !IsPlayerAlive(client) || !SurfAutoOn() || !g_HasSpawn[client])
+		return Plugin_Stop;
+
+	float pos[3], ang[3];
+	GetClientAbsOrigin(client, pos);
+	GetClientEyeAngles(client, ang);
+
+	// Somewhere new = the next stage.
+	bool known = GetVectorDistance(pos, g_SpawnPos[client]) < SURF_NEAR;
+	for (int i = 0; i < g_StageCount[client] && !known; i++)
+		known = GetVectorDistance(pos, g_StagePos[client][i]) < SURF_NEAR;
+
+	if (!known)
+	{
+		if (g_StageCount[client] < SURF_MAX_STAGES)
+		{
+			int s = g_StageCount[client]++;
+			g_StagePos[client][s] = pos;
+			g_StageAng[client][s] = ang;
+		}
+		PrintHintText(client, "Stage %d reached", g_StageCount[client] + 1);
+		return Plugin_Stop;
+	}
+
+	// A fall: back to the start, or to the last stage reached.
+	float zero[3];
+	if (g_StageCount[client] == 0)
+	{
+		TeleportEntity(client, g_SpawnPos[client], g_SpawnAng[client], zero);
+		ResetMapProgress(client);
+	}
+	else
+	{
+		int s = g_StageCount[client] - 1;
+		if (GetVectorDistance(pos, g_StagePos[client][s]) > 64.0)
+			TeleportEntity(client, g_StagePos[client][s], g_StageAng[client][s], zero);
+	}
+	return Plugin_Stop;
 }

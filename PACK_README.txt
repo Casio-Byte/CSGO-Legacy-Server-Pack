@@ -354,6 +354,12 @@ KZ / Bhop / Surf (anyone, while the server is in one of these modes)
 
   Players respawn instantly, pass through each other and can't hurt each
   other. Map damage (falling into kill zones) still works.
+  Surf: falling off sends you back to the start, like !r - until you finish
+  a stage; after that a fall takes you back to the start of the last stage
+  you reached ("Stage N reached" shows when you get to a new one). The
+  plugin works this out from the map's own teleports. !r always goes back
+  to the very start. Turn it off with match_surf_auto_restart 0 in
+  cfg\sourcemod\csgo_match.cfg.
   Physics per mode (edit freely):
     cfg\csgo_match\kz.cfg      airaccelerate 100, no auto-bhop, no stamina
     cfg\csgo_match\bhop.cfg    airaccelerate 1000, auto-bhop, no stamina

@@ -183,6 +183,8 @@ Also included: SourceTV demo recording per match and round backups.
 ### KZ / Bhop / Surf
 `!r` `!cp` `!tp` `!pcp` `!ncp` `!speed` `!hide` `!noclip`. Instant respawn, no collisions or player damage. These modes have no run timers.
 
+**Surf auto-restart:** falling off sends you back to the start, like `!r`. Once you finish a stage, a fall takes you back to the start of the last stage you reached; "Stage N reached" shows each time you get to a new one. The plugin works out stages from the map's own teleports: landing somewhere new counts as the next stage, landing somewhere you've been counts as a fall. Spawns and `!r` also clear the stage markers maps put on players, so a fresh start really is the start. Turn it off with `match_surf_auto_restart 0`.
+
 ### 1v1
 - `!1v1` opens a menu with every 1v1 mode.
 - **Aim duel**: `!duel [name]`, pick a weapon and kills to win, then `!accept` / `!decline` / `!forfeit`.
