@@ -241,7 +241,7 @@ char g_RegisteredCmds[][] =
 	"speed", "hide", "noclip", "nc",
 	"guns", "sitout", "rank", "maps", "changemap",
 	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries",
-	"aimbotz", "aim", "training"
+	"aimbotz", "aimbots", "aim", "training"
 };
 
 /* ------------------------------------------------------------------ */
@@ -869,7 +869,7 @@ void Dispatch(int client, const char[] cmd, const char[] arg)
 	// game modes / options
 	else if (Is(cmd, "gamemode") || Is(cmd, "mode") || Is(cmd, "modes"))  Cmd_GameMode(client);
 	else if (Is(cmd, "options") || Is(cmd, "settings"))                  Cmd_Options(client);
-	else if (Is(cmd, "aimbotz") || Is(cmd, "aim") || Is(cmd, "training"))  Cmd_AimBotz(client);
+	else if (Is(cmd, "aimbotz") || Is(cmd, "aimbots") || Is(cmd, "aim") || Is(cmd, "training"))  Cmd_AimBotz(client);
 	// best of 3
 	else if (Is(cmd, "series") || Is(cmd, "maps3"))                      Cmd_Series(client);
 	else if (Is(cmd, "bo3") || Is(cmd, "veto"))                          Cmd_Bo3(client);
@@ -2886,7 +2886,7 @@ public int Handler_GameMode(Menu menu, MenuAction action, int client, int item)
 void AddMapItem(Menu menu, const char[] map, StringMap seen)
 {
 	int dummy;
-	if (seen.GetValue(map, dummy) || !IsMapValid(map))
+	if (seen.GetValue(map, dummy) || !MapExists(map))
 		return;
 	seen.SetValue(map, 1);
 	menu.AddItem(map, map);
@@ -3003,6 +3003,11 @@ public Action Timer_SwitchMode(Handle timer)
 	g_SwitchMode = -1;
 	if (gm < 0 || gm >= GM_COUNT)
 		return Plugin_Stop;
+	if (!MapExists(g_SwitchMap))
+	{
+		Announce("\x02Can't switch: map %s isn't installed on the server.\x01 Nothing was changed.", g_SwitchMap);
+		return Plugin_Stop;
+	}
 
 	g_PracticeNext = (gm == GM_Practice);
 	int newMove = (gm >= GM_KZ && gm <= GM_Surf) ? (MOVE_KZ + gm - GM_KZ) : MOVE_NONE;
@@ -3445,17 +3450,36 @@ void ReadModeMapList(int gm, ArrayList list)
 	delete f;
 }
 
+// IsMapValid() on CS:GO also accepts fuzzy matches (training_aim_csgo2 can
+// resolve to de_train), so only accept a real match: an exact map, or a
+// resolved name whose map name is the same (e.g. a workshop path).
+bool MapExists(const char[] map)
+{
+	char found[PLATFORM_MAX_PATH];
+	FindMapResult r = FindMap(map, found, sizeof(found));
+	if (r == FindMap_Found)
+		return true;
+	if (r == FindMap_FuzzyMatch || r == FindMap_NonCanonical)
+	{
+		char a[PLATFORM_MAX_PATH], b[PLATFORM_MAX_PATH];
+		MapShortName(map, a, sizeof(a));
+		MapShortName(found, b, sizeof(b));
+		return StrEqual(a, b, false);
+	}
+	return false;
+}
+
 bool MapInstalled(int gm, const char[] name, char[] mapPath, int maxlen)
 {
 	// In the mode's folder, or anywhere the game can find it (maps\, workshop).
 	char inFolder[PLATFORM_MAX_PATH];
 	Format(inFolder, sizeof(inFolder), "modes/%s/%s", g_GmFolder[gm], name);
-	if (IsMapValid(inFolder))
+	if (MapExists(inFolder))
 	{
 		strcopy(mapPath, maxlen, inFolder);
 		return true;
 	}
-	if (IsMapValid(name))
+	if (MapExists(name))
 	{
 		strcopy(mapPath, maxlen, name);
 		return true;
@@ -5095,8 +5119,14 @@ void ChangeMapOnly(int client, const char[] path)
 
 public Action Timer_ChangeMap(Handle timer)
 {
-	if (g_SwitchMap[0] != '\0')
-		ServerCommand("changelevel %s", g_SwitchMap);
+	if (g_SwitchMap[0] == '\0')
+		return Plugin_Stop;
+	if (!MapExists(g_SwitchMap))
+	{
+		Announce("\x02Can't change map: %s isn't installed on the server.", g_SwitchMap);
+		return Plugin_Stop;
+	}
+	ServerCommand("changelevel %s", g_SwitchMap);
 	return Plugin_Stop;
 }
 
