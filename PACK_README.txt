@@ -51,7 +51,9 @@ INSTALL (drag and drop)
        LAN / virtual LAN or internet (+ login token for internet),
        the address players download maps from (your public IP for
        internet - it's filled in for you), auto-download maps, FastDL,
-       auto-restart
+       auto-restart, and - if players' skin / loadout preferences from an
+       earlier install are found (kept by the uninstaller, or in one of its
+       _server_pack_backup_ folders) - whether to use them
    Press Enter to keep the value in [brackets] - it picks up your current
    values. The setup owns these settings: if server.cfg or autoexec.cfg
    also sets the name, a password, sv_lan or the download address, it

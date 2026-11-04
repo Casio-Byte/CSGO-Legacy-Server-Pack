@@ -70,6 +70,7 @@ The first run (or `start_server.bat setup`) asks for:
 - **network**: `1` LAN / virtual LAN (Tailscale, ZeroTier) or `2` Internet (asks for a login token, App ID 730)
 - the address players download maps from. In Internet mode your public IP is filled in automatically.
 - auto-download community maps, run FastDL, auto-restart on crash
+- if **players' skin / loadout preferences** from an earlier install are found (left in place by the uninstaller, or in an uninstall backup folder): whether to use / restore them. Saying no moves them to `_old_player_prefs_<date>` instead of deleting them.
 
 It writes three files, all ignored by git and private:
 

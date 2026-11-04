@@ -154,6 +154,7 @@ function AskNumber([string]$question, [int]$default, [int]$min, [int]$max) {
 }
 
 # Existing values make good defaults: previous answers, then server.cfg.
+$firstSetup = -not (Test-Path $settingsFile)   # first setup on this server (fresh install / reinstall)
 $old = @{}
 if (Test-Path $settingsFile) {
     Get-Content $settingsFile | ForEach-Object { if ($_ -match '^set "([A-Z_]+)=(.*)"$') { $old[$matches[1]] = $matches[2] } }
@@ -320,6 +321,54 @@ Write-Host ''
 $autoMaps    = AskYesNo 'Download missing community maps on start' ((OldOr 'AUTO_DOWNLOAD_MAPS' '1') -eq '1')
 $fastdl      = AskYesNo 'Run FastDL (fast map downloads for players)' ((OldOr 'START_FASTDL' '1') -eq '1')
 $autoRestart = AskYesNo 'Restart the server automatically if it crashes' ((OldOr 'AUTO_RESTART' '1') -eq '1')
+
+# ---- Players' saved skin / loadout preferences from an earlier install ----
+# (kept by uninstall_server_pack.bat, or in one of its backup folders)
+$prefRel = @('addons\sourcemod\data\csgo_loadout', 'addons\sourcemod\data\sqlite\clientprefs-sqlite.sq3')
+function CountLoadouts([string]$root) {
+    return @(Get-ChildItem (Join-Path $root 'addons\sourcemod\data\csgo_loadout') -Filter '*.cfg' -File -ErrorAction SilentlyContinue).Count
+}
+$inPlace = CountLoadouts $csgo
+if ($inPlace -gt 0 -and $firstSetup) {
+    Write-Host ''
+    Write-Host "Found $inPlace saved player skin / loadout file(s) (and !guns picks) from an earlier install."
+    $use = AskYesNo 'Use them, so everyone gets their skins back' $true
+    if (-not $use) {
+        $aside = Join-Path $csgo ('_old_player_prefs_' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+        foreach ($rel in $prefRel) {
+            $src = Join-Path $csgo $rel
+            if (-not (Test-Path $src)) { continue }
+            $dst = Join-Path $aside $rel
+            New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
+            Move-Item -LiteralPath $src -Destination $dst -Force
+        }
+        Write-Host "  Moved them to $aside - everyone starts fresh (delete that folder if you don't need it)." -ForegroundColor DarkGray
+    }
+}
+elseif ($inPlace -eq 0) {
+    $bk = Get-ChildItem $csgo -Directory -Filter '_server_pack_backup_*' -ErrorAction SilentlyContinue |
+          Sort-Object Name -Descending | Where-Object { (CountLoadouts $_.FullName) -gt 0 } | Select-Object -First 1
+    if ($bk) {
+        Write-Host ''
+        Write-Host "Found $(CountLoadouts $bk.FullName) saved player skin / loadout file(s) (and !guns picks) in the uninstall backup $($bk.Name)."
+        if (AskYesNo 'Restore them, so everyone gets their skins back' $true) {
+            foreach ($rel in $prefRel) {
+                $src = Join-Path $bk.FullName $rel
+                if (-not (Test-Path $src)) { continue }
+                $dst = Join-Path $csgo $rel
+                if (Test-Path $src -PathType Container) {
+                    # file by file, so an existing (empty) folder doesn't get a nested copy
+                    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+                    Get-ChildItem $src -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dst $_.Name) -Force }
+                } else {
+                    New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
+                    Copy-Item -LiteralPath $src -Destination $dst -Force
+                }
+            }
+            Write-Host '  Restored (the backup folder is left as it is).' -ForegroundColor DarkGray
+        }
+    }
+}
 
 # ---- Build the launch options ----
 # Game mode and map are added at each start (start_server.bat finds the map's
