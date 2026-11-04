@@ -134,7 +134,7 @@ Commands only work in the modes they belong to; anywhere else they say so. `!hel
 | `!bo3` `!bo1` `!series` `!endseries` | Competitive 5v5 |
 | `!duel` `!accept` `!decline` `!forfeit` | 1v1 duels, Multi-1v1 arenas |
 | `!guns` `!sitout` `!rank` | Multi-1v1 arenas (`!guns` is also the Retakes loadout menu) |
-| `!rtv` `!unrtv` | every mode, except during a live 5v5 / wingman match or a best of 3 |
+| `!rtv` `!unrtv` `!rtg` `!unrtg` | every mode, except during a live 5v5 / wingman match or a best of 3 |
 | skins, `!gamemode`, `!1v1`, `!map`, `!options`, `!help`, `!status` | everywhere |
 
 ### Game modes: `!gamemode` (admins)
@@ -167,6 +167,9 @@ Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of s
 
 ### Rock the vote: `!rtv`
 Type `!rtv` (or just `rtv`). When 60% of players have (`match_rtv_ratio`), everyone votes between up to 6 maps of the current mode and "Stay"; the winner loads in the same mode. Works in every mode, but **never during a live 5v5 or wingman match** (knife round and side pick included) or a best of 3. Warmup is fine. Opens 30 s after a map loads; after a "stay" result the next vote can start 3 minutes later. `match_rtv_enabled 0` turns it off.
+
+### Rock the gamemode: `!rtg`
+Type `!rtg` (or `rock the gamemode`). Same 60% and same rules as `!rtv`. Two votes follow: first the game mode (every other mode that has a map to play, up to 8, plus "Stay"), then the map, **only maps made for the winning mode** (plus "Keep <current map>" if it suits). The server then switches like `!gamemode` does.
 
 ### Match flow
 Warmup → `!ready` → (map vote if best of 3) → knife round → winners `!stay` / `!switch` / `!t` / `!ct` → **LIVE**

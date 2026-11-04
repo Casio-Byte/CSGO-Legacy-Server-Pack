@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.16.0-20261104"
+#define PLUGIN_VERSION "1.17.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -230,7 +230,9 @@ ConVar g_cvArenaShuffle;
 ConVar g_cvSkipTeamMenu;
 ConVar g_cvRtvEnabled;
 ConVar g_cvRtvRatio;
-bool  g_RtvVoted[MAXPLAYERS + 1];
+bool  g_RtvVoted[MAXPLAYERS + 1];   // rock the vote (map)
+bool  g_RtgVoted[MAXPLAYERS + 1];   // rock the gamemode
+int   g_RtvVoteGm = -1;             // mode of the map vote running (-1 = same mode)
 bool  g_RtvVoteRunning = false;
 bool  g_RtvChanging = false;
 float g_RtvAllowedAt = 0.0;   // engine time
@@ -253,7 +255,8 @@ char g_RegisteredCmds[][] =
 	"gamemode", "mode", "modes", "options", "settings",
 	"guns", "sitout", "rank", "maps", "changemap",
 	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries",
-	"rtv", "rockthevote", "unrtv"
+	"rtv", "rockthevote", "unrtv",
+	"rtg", "rockthegamemode", "rockthemode", "unrtg", "rock"
 };
 
 /* ------------------------------------------------------------------ */
@@ -511,8 +514,8 @@ public void OnPluginStart()
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	g_cvSkipTeamMenu  = CreateConVar("match_skip_team_menu", "1", "1 = no team-select screen when a player joins or a map loads; they're put on a team automatically (M still opens it)", _, true, 0.0, true, 1.0);
 	g_cvDmLoadout     = CreateConVar("match_dm_loadout", "1", "Deathmatch: 1 = everyone spawns with knife, AK-47 and Desert Eagle, and the buy menu is off (Deathmatch is always free-for-all)", _, true, 0.0, true, 1.0);
-	g_cvRtvEnabled    = CreateConVar("match_rtv_enabled", "1", "1 = players can rock the vote (!rtv) for a new map of the current mode. Never during a live 5v5 / wingman match.", _, true, 0.0, true, 1.0);
-	g_cvRtvRatio      = CreateConVar("match_rtv_ratio", "0.6", "Share of players that must type !rtv to start the map vote", _, true, 0.05, true, 1.0);
+	g_cvRtvEnabled    = CreateConVar("match_rtv_enabled", "1", "1 = players can rock the vote (!rtv, new map) and rock the gamemode (!rtg, new mode + map). Never during a live 5v5 / wingman match.", _, true, 0.0, true, 1.0);
+	g_cvRtvRatio      = CreateConVar("match_rtv_ratio", "0.6", "Share of players that must type !rtv (or !rtg) to start the vote", _, true, 0.05, true, 1.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
 	PrintToServer("[Match] CS:GO Match %s loaded", PLUGIN_VERSION);
@@ -675,9 +678,10 @@ public void OnClientDisconnect(int client)
 	g_VetoVote[client] = -1;
 	if (g_VetoRunning)
 		RequestFrame(Frame_VetoCheckDone, g_VetoSerial);
-	if (g_RtvVoted[client])
+	if (g_RtvVoted[client] || g_RtgVoted[client])
 	{
 		g_RtvVoted[client] = false;
+		g_RtgVoted[client] = false;
 		RequestFrame(Frame_RtvCheck);
 	}
 }
@@ -699,9 +703,16 @@ public Action Command_Generic(int client, int args)
 
 public void OnClientSayCommand_Post(int client, const char[] command, const char[] sArgs)
 {
-	if (client > 0 && (StrEqual(sArgs, "rtv", false) || StrEqual(sArgs, "rockthevote", false)))
+	if (client > 0 && (StrEqual(sArgs, "rtv", false) || StrEqual(sArgs, "rockthevote", false)
+		|| StrEqual(sArgs, "rock the vote", false)))
 	{
 		Dispatch(client, "rtv", "");
+		return;
+	}
+	if (client > 0 && (StrEqual(sArgs, "rtg", false) || StrEqual(sArgs, "rock the gamemode", false)
+		|| StrEqual(sArgs, "rock the mode", false)))
+	{
+		Dispatch(client, "rtg", "");
 		return;
 	}
 	if (client <= 0 || sArgs[0] != '.')
@@ -852,8 +863,12 @@ void Dispatch(int client, const char[] cmd, const char[] arg)
 	else if (Is(cmd, "bo1"))                                             Cmd_Bo1(client);
 	else if (Is(cmd, "endseries") || Is(cmd, "cancelseries"))            Cmd_EndSeries(client);
 	// rock the vote
-	else if (Is(cmd, "rtv") || Is(cmd, "rockthevote"))                   Cmd_Rtv(client, true);
-	else if (Is(cmd, "unrtv"))                                           Cmd_Rtv(client, false);
+	else if (Is(cmd, "rtv") || Is(cmd, "rockthevote"))                   Cmd_Rtv(client, true, false);
+	else if (Is(cmd, "unrtv"))                                           Cmd_Rtv(client, false, false);
+	else if (Is(cmd, "rtg") || Is(cmd, "rockthegamemode") || Is(cmd, "rockthemode")) Cmd_Rtv(client, true, true);
+	else if (Is(cmd, "unrtg"))                                           Cmd_Rtv(client, false, true);
+	// "!rock the vote" / "!rock the gamemode"
+	else if (Is(cmd, "rock"))                                            Cmd_Rtv(client, true, StrContains(arg, "mode", false) != -1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1343,7 +1358,7 @@ void Cmd_Help(int client)
 	if (CurrentMode() == GM_Retakes)
 		Reply(client, "\x04Retakes:\x01 !guns (pick your weapons)");
 	Reply(client, "\x04Skins:\x01 !ws !presets !knife !gloves !agents !stickers");
-	Reply(client, "\x04Map:\x01 !rtv (rock the vote - not during a live match)");
+	Reply(client, "\x04Votes:\x01 !rtv (new map) !rtg (new game mode) - not during a live match");
 	if (admin)
 		Reply(client, "\x04Modes:\x01 !gamemode !1v1 !map !options");
 	else
@@ -3121,7 +3136,7 @@ void ApplyModeOnMapStart()
 	CreateTimer(5.0, Timer_ModeAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-/* ---------- Rock the vote (every mode, never during a live match) ---------- */
+/* ---------- Rock the vote / rock the gamemode (every mode, never during a live match) ---------- */
 
 bool RtvBlocked(char[] why, int maxlen)
 {
@@ -3149,12 +3164,12 @@ int RtvHumans()
 	return n;
 }
 
-int RtvVotes()
+int RtvVotes(bool mode)
 {
 	int n = 0;
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (g_RtvVoted[i] && IsClientInGame(i) && !IsFakeClient(i))
+		if ((mode ? g_RtgVoted[i] : g_RtvVoted[i]) && IsClientInGame(i) && !IsFakeClient(i))
 			n++;
 	}
 	return n;
@@ -3169,16 +3184,24 @@ int RtvNeeded()
 void RtvOnMapStart()
 {
 	for (int i = 0; i <= MaxClients; i++)
+	{
 		g_RtvVoted[i] = false;
+		g_RtgVoted[i] = false;
+	}
 	g_RtvVoteRunning = false;
 	g_RtvChanging = false;
+	g_RtvVoteGm = -1;
 	g_RtvAllowedAt = GetEngineTime() + 30.0;
 }
 
-void Cmd_Rtv(int client, bool on)
+void Cmd_Rtv(int client, bool on, bool mode)
 {
 	if (!CheckInGame(client))
 		return;
+	char what[24];
+	strcopy(what, sizeof(what), mode ? "rock the gamemode" : "rock the vote");
+	char cmdName[8];
+	strcopy(cmdName, sizeof(cmdName), mode ? "!rtg" : "!rtv");
 	if (!g_cvRtvEnabled.BoolValue)
 	{
 		Reply(client, "Rock the vote is turned off on this server.");
@@ -3190,18 +3213,19 @@ void Cmd_Rtv(int client, bool on)
 		Reply(client, "%s", why);
 		return;
 	}
+	bool voted = mode ? g_RtgVoted[client] : g_RtvVoted[client];
 	if (!on)
 	{
-		if (g_RtvVoted[client])
+		if (voted)
 		{
-			g_RtvVoted[client] = false;
-			Announce("%N took back their rock the vote (\x04%d/%d\x01).", client, RtvVotes(), RtvNeeded());
+			if (mode) g_RtgVoted[client] = false; else g_RtvVoted[client] = false;
+			Announce("%N took back their %s (\x04%d/%d\x01).", client, what, RtvVotes(mode), RtvNeeded());
 		}
 		return;
 	}
 	if (g_RtvVoteRunning || g_RtvChanging)
 	{
-		Reply(client, "A map vote is already running.");
+		Reply(client, "A vote is already running.");
 		return;
 	}
 	float wait = g_RtvAllowedAt - GetEngineTime();
@@ -3210,13 +3234,16 @@ void Cmd_Rtv(int client, bool on)
 		Reply(client, "Rock the vote opens in \x04%d\x01 seconds.", RoundToCeil(wait));
 		return;
 	}
-	if (g_RtvVoted[client])
+	if (voted)
 	{
-		Reply(client, "You already rocked the vote (\x04%d/%d\x01).", RtvVotes(), RtvNeeded());
+		Reply(client, "You already voted to %s (\x04%d/%d\x01).", what, RtvVotes(mode), RtvNeeded());
 		return;
 	}
-	g_RtvVoted[client] = true;
-	Announce("%N wants to rock the vote (\x04%d/%d\x01) - type \x04!rtv\x01 to join.", client, RtvVotes(), RtvNeeded());
+	if (mode) g_RtgVoted[client] = true; else g_RtvVoted[client] = true;
+	if (mode)
+		Announce("%N wants to %s - pick a new game mode (\x04%d/%d\x01). Type \x04%s\x01 to join.", client, what, RtvVotes(mode), RtvNeeded(), cmdName);
+	else
+		Announce("%N wants to %s - pick a new map (\x04%d/%d\x01). Type \x04%s\x01 to join.", client, what, RtvVotes(mode), RtvNeeded(), cmdName);
 	RtvCheck();
 }
 
@@ -3227,23 +3254,46 @@ public void Frame_RtvCheck(any data)
 
 void RtvCheck()
 {
-	if (g_RtvVoteRunning || g_RtvChanging || RtvVotes() == 0 || RtvVotes() < RtvNeeded())
+	if (g_RtvVoteRunning || g_RtvChanging)
 		return;
 	char why[96];
 	if (RtvBlocked(why, sizeof(why)))
 		return;
-	StartRtvVote();
+	int need = RtvNeeded();
+	if (RtvVotes(true) > 0 && RtvVotes(true) >= need)
+		StartModeVote();
+	else if (RtvVotes(false) > 0 && RtvVotes(false) >= need)
+		StartMapVote(-1);
 }
 
-// The current mode's maps (installed and suited to it), current map left out.
-void CollectModeMaps(int gm, ArrayList paths)
+public Action Timer_RtvRetry(Handle timer)
 {
-	Menu tmp = new Menu(Handler_RtvVote);
+	RtvCheck();
+	return Plugin_Stop;
+}
+
+void RtvReset(float cooldown)
+{
+	for (int i = 0; i <= MaxClients; i++)
+	{
+		g_RtvVoted[i] = false;
+		g_RtgVoted[i] = false;
+	}
+	g_RtvVoteRunning = false;
+	g_RtvVoteGm = -1;
+	g_RtvAllowedAt = GetEngineTime() + cooldown;
+}
+
+// A mode's maps (installed and suited to it). keepCurrent: also the current map.
+void CollectModeMaps(int gm, ArrayList paths, bool keepCurrent = false)
+{
+	Menu tmp = new Menu(Handler_RtvMapVote);
 	StringMap seen = new StringMap();
 	char current[PLATFORM_MAX_PATH], currentName[PLATFORM_MAX_PATH];
 	GetCurrentMap(current, sizeof(current));
 	GetMapDisplayName(current, currentName, sizeof(currentName));
-	seen.SetValue(currentName, 1);
+	if (!keepCurrent)
+		seen.SetValue(currentName, 1);
 	int keep = g_MenuGm;
 	g_MenuGm = gm;
 	AddFolderMaps(tmp, gm, seen);
@@ -3271,29 +3321,70 @@ void CollectModeMaps(int gm, ArrayList paths)
 	delete tmp;
 }
 
-void StartRtvVote()
+bool OpenVote(Menu vote, const char[] announce)
+{
+	if (!vote.DisplayVoteToAll(20))
+	{
+		// Another vote got in first: try again shortly.
+		delete vote;
+		CreateTimer(5.0, Timer_RtvRetry, _, TIMER_FLAG_NO_MAPCHANGE);
+		return false;
+	}
+	g_RtvVoteRunning = true;
+	Announce("%s (\x0420\x01 seconds).", announce);
+	return true;
+}
+
+/* Map vote. gm = -1: a new map for the current mode (!rtv), with "Stay".
+   gm >= 0: the second step of !rtg - the map for the new mode. */
+void StartMapVote(int gm)
 {
 	if (IsVoteInProgress())
 	{
 		CreateTimer(5.0, Timer_RtvRetry, _, TIMER_FLAG_NO_MAPCHANGE);
 		return;
 	}
+	bool modeChange = gm >= 0;
+	int target = modeChange ? gm : CurrentMode();
+	char current[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH], path[PLATFORM_MAX_PATH], line[96];
+	GetCurrentMap(current, sizeof(current));
+	GetMapDisplayName(current, name, sizeof(name));
+
 	ArrayList maps = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
-	CollectModeMaps(CurrentMode(), maps);
-	if (maps.Length == 0)
+	CollectModeMaps(target, maps);
+	// Only maps made for the mode being voted on (e.g. am_ maps only for arenas).
+	for (int i = maps.Length - 1; i >= 0; i--)
 	{
-		Announce("Rock the vote: no other maps are installed for this mode.");
+		maps.GetString(i, path, sizeof(path));
+		if (!MapFitsMode(target, path))
+			maps.Erase(i);
+	}
+	bool currentFits = modeChange && MapFitsMode(target, current);
+	if (maps.Length == 0 && !currentFits)
+	{
+		if (modeChange)
+			Announce("Rock the gamemode: no maps for \x04%s\x01 are installed - nothing changes.", g_GmName[target]);
+		else
+			Announce("Rock the vote: no other maps are installed for this mode.");
 		delete maps;
 		RtvReset(120.0);
 		return;
 	}
-	char mode[40], current[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH], path[PLATFORM_MAX_PATH], line[96];
-	GetModeName(mode, sizeof(mode));
-	GetCurrentMap(current, sizeof(current));
-	GetMapDisplayName(current, name, sizeof(name));
 
-	Menu vote = new Menu(Handler_RtvVote, MENU_ACTIONS_DEFAULT | MenuAction_VoteEnd | MenuAction_VoteCancel);
-	vote.SetTitle("Rock the vote - next map (%s)", mode);
+	Menu vote = new Menu(Handler_RtvMapVote, MENU_ACTIONS_DEFAULT | MenuAction_VoteEnd | MenuAction_VoteCancel);
+	if (modeChange)
+		vote.SetTitle("%s - pick the map", g_GmName[target]);
+	else
+	{
+		char mode[40];
+		GetModeName(mode, sizeof(mode));
+		vote.SetTitle("Rock the vote - next map (%s)", mode);
+	}
+	if (currentFits)
+	{
+		Format(line, sizeof(line), "Keep %s", name);
+		vote.AddItem(current, line);
+	}
 	int picks = maps.Length < 6 ? maps.Length : 6;
 	for (int i = 0; i < picks; i++)
 	{
@@ -3303,37 +3394,90 @@ void StartRtvVote()
 		MapShortName(path, line, sizeof(line));
 		vote.AddItem(path, line);
 	}
-	Format(line, sizeof(line), "Stay on %s", name);
-	vote.AddItem("#stay", line);
+	if (!modeChange)
+	{
+		Format(line, sizeof(line), "Stay on %s", name);
+		vote.AddItem("#stay", line);
+	}
 	vote.ExitButton = false;
 	delete maps;
 
-	if (!vote.DisplayVoteToAll(20))
+	g_RtvVoteGm = gm;
+	if (modeChange)
 	{
-		// Another vote got in first: try again shortly.
-		delete vote;
+		char msg[128];
+		Format(msg, sizeof(msg), "Pick the map for \x04%s\x01", g_GmName[target]);
+		OpenVote(vote, msg);
+	}
+	else
+		OpenVote(vote, "Rock the vote! Pick the next map");
+}
+
+// !rtg step 1: vote on the game mode. Only modes with a map to play are offered.
+void StartModeVote()
+{
+	if (IsVoteInProgress())
+	{
 		CreateTimer(5.0, Timer_RtvRetry, _, TIMER_FLAG_NO_MAPCHANGE);
 		return;
 	}
-	g_RtvVoteRunning = true;
-	Announce("Rock the vote! Pick the next map (\x0420\x01 seconds).");
+	int current = CurrentMode();
+	char cur[PLATFORM_MAX_PATH], info[8], mode[40];
+	GetCurrentMap(cur, sizeof(cur));
+	GetModeName(mode, sizeof(mode));
+
+	ArrayList modes = new ArrayList();
+	for (int gm = 0; gm < GM_COUNT; gm++)
+	{
+		if (gm == current)
+			continue;
+		if (gm == GM_Retakes && FindConVar("sm_retakes_enabled") == null)
+			continue; // retakes.smx not loaded
+		ArrayList maps = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+		CollectModeMaps(gm, maps);
+		bool playable = maps.Length > 0 || MapFitsMode(gm, cur);
+		delete maps;
+		if (playable)
+			modes.Push(gm);
+	}
+	if (modes.Length == 0)
+	{
+		Announce("Rock the gamemode: no other mode has maps installed.");
+		delete modes;
+		RtvReset(120.0);
+		return;
+	}
+
+	Menu vote = new Menu(Handler_RtvModeVote, MENU_ACTIONS_DEFAULT | MenuAction_VoteEnd | MenuAction_VoteCancel);
+	vote.SetTitle("Rock the gamemode - now: %s", mode);
+	vote.Pagination = MENU_NO_PAGINATION;
+	int picks = modes.Length < 8 ? modes.Length : 8; // + "Stay" = 9 keys
+	for (int i = 0; i < picks; i++)
+	{
+		int r = GetRandomInt(i, modes.Length - 1);
+		modes.SwapAt(i, r);
+	}
+	// Keep the menu in the usual mode order.
+	ArrayList chosen = new ArrayList();
+	for (int i = 0; i < picks; i++)
+		chosen.Push(modes.Get(i));
+	chosen.Sort(Sort_Ascending, Sort_Integer);
+	for (int i = 0; i < chosen.Length; i++)
+	{
+		int gm = chosen.Get(i);
+		IntToString(gm, info, sizeof(info));
+		vote.AddItem(info, g_GmName[gm]);
+	}
+	char stay[64];
+	Format(stay, sizeof(stay), "Stay on %s", mode);
+	vote.AddItem("#stay", stay);
+	vote.ExitButton = false;
+	delete chosen;
+	delete modes;
+	OpenVote(vote, "Rock the gamemode! Pick the next game mode");
 }
 
-public Action Timer_RtvRetry(Handle timer)
-{
-	RtvCheck();
-	return Plugin_Stop;
-}
-
-void RtvReset(float cooldown)
-{
-	for (int i = 0; i <= MaxClients; i++)
-		g_RtvVoted[i] = false;
-	g_RtvVoteRunning = false;
-	g_RtvAllowedAt = GetEngineTime() + cooldown;
-}
-
-public int Handler_RtvVote(Menu menu, MenuAction action, int param1, int param2)
+public int Handler_RtvModeVote(Menu menu, MenuAction action, int param1, int param2)
 {
 	if (action == MenuAction_End)
 	{
@@ -3341,14 +3485,65 @@ public int Handler_RtvVote(Menu menu, MenuAction action, int param1, int param2)
 	}
 	else if (action == MenuAction_VoteCancel)
 	{
-		Announce("Rock the vote: nobody voted - staying on this map.");
+		Announce("Rock the gamemode: nobody voted - the mode stays.");
 		RtvReset(180.0);
 	}
 	else if (action == MenuAction_VoteEnd)
 	{
-		char path[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH];
+		char info[16], name[64], why[96];
+		menu.GetItem(param1, info, sizeof(info), _, name, sizeof(name));
+		if (StrEqual(info, "#stay"))
+		{
+			Announce("Rock the gamemode: the mode stays.");
+			RtvReset(180.0);
+		}
+		else if (RtvBlocked(why, sizeof(why)))
+		{
+			Announce("Rock the gamemode: %s Nothing changes.", why);
+			RtvReset(180.0);
+		}
+		else
+		{
+			int gm = StringToInt(info);
+			g_RtvVoteRunning = false;
+			Announce("Rock the gamemode: \x04%s\x01 won. Now pick the map...", g_GmName[gm]);
+			DataPack pack = new DataPack();
+			pack.WriteCell(gm);
+			CreateTimer(1.5, Timer_RtgMapVote, pack, TIMER_FLAG_NO_MAPCHANGE | TIMER_DATA_HNDL_CLOSE);
+		}
+	}
+	return 0;
+}
+
+public Action Timer_RtgMapVote(Handle timer, DataPack pack)
+{
+	pack.Reset();
+	int gm = pack.ReadCell();
+	if (gm < 0 || gm >= GM_COUNT)
+		return Plugin_Stop;
+	StartMapVote(gm);
+	return Plugin_Stop;
+}
+
+public int Handler_RtvMapVote(Menu menu, MenuAction action, int param1, int param2)
+{
+	if (action == MenuAction_End)
+	{
+		delete menu;
+	}
+	else if (action == MenuAction_VoteCancel)
+	{
+		if (g_RtvVoteGm >= 0)
+			Announce("Rock the gamemode: nobody picked a map - nothing changes.");
+		else
+			Announce("Rock the vote: nobody voted - staying on this map.");
+		RtvReset(180.0);
+	}
+	else if (action == MenuAction_VoteEnd)
+	{
+		char path[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH], why[96];
 		menu.GetItem(param1, path, sizeof(path), _, name, sizeof(name));
-		char why[96];
+		int gm = g_RtvVoteGm;
 		if (StrEqual(path, "#stay"))
 		{
 			Announce("Rock the vote: staying on this map.");
@@ -3356,8 +3551,18 @@ public int Handler_RtvVote(Menu menu, MenuAction action, int param1, int param2)
 		}
 		else if (RtvBlocked(why, sizeof(why)))
 		{
-			Announce("Rock the vote: %s Staying on this map.", why);
+			Announce("Rock the vote: %s Nothing changes.", why);
 			RtvReset(180.0);
+		}
+		else if (gm >= 0)
+		{
+			// New mode: the same switch as !gamemode (checks the map, sets the mode).
+			g_RtvVoteRunning = false;
+			g_RtvChanging = true;
+			g_SwitchMode = gm;
+			strcopy(g_SwitchMap, sizeof(g_SwitchMap), path);
+			Announce("Switching to \x04%s\x01 on \x04%s\x01 in 5 seconds...", g_GmName[gm], name);
+			CreateTimer(5.0, Timer_RtgSwitch, _, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		else
 		{
@@ -3369,6 +3574,20 @@ public int Handler_RtvVote(Menu menu, MenuAction action, int param1, int param2)
 		}
 	}
 	return 0;
+}
+
+public Action Timer_RtgSwitch(Handle timer)
+{
+	char why[96];
+	if (RtvBlocked(why, sizeof(why)))
+	{
+		g_RtvChanging = false;
+		g_SwitchMode = -1;
+		Announce("Rock the gamemode: %s The switch was cancelled.", why);
+		return Plugin_Stop;
+	}
+	g_RtvChanging = false;
+	return Timer_SwitchMode(null); // re-checks the map is installed and suits the mode
 }
 
 public Action Timer_RtvChange(Handle timer)

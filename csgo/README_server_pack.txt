@@ -296,7 +296,7 @@ Commands only work in the modes they belong to (anything else says so):
   !duel and its answers 1v1 duels and Multi-1v1 arenas only
   !guns / !sitout / !rank  Multi-1v1 arenas only
   !guns                 also in Retakes (the retakes loadout menu)
-  !rtv                  every mode, but not during a live 5v5 / wingman
+  !rtv / !rtg           every mode, but not during a live 5v5 / wingman
                         match or a best of 3
   Skins (!ws etc.), !gamemode, !1v1, !map, !options, !help, !status work
   everywhere. !help lists just the commands for the current mode.
@@ -550,7 +550,7 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
   match_dm_loadout                    (1 = knife + AK-47 + Deagle in
                                        Deathmatch, no buy menu)
   match_skip_team_menu                (1 = auto-join a team, no team menu)
-  match_rtv_enabled                   (1 = !rtv allowed)
+  match_rtv_enabled                   (1 = !rtv and !rtg allowed)
   match_rtv_ratio                     (share of players needed, 0.6)
 
 
@@ -590,6 +590,16 @@ current mode (installed and suited to it) and "Stay". The winner loads in
     (knife round and side pick included) or a best of 3. Warmup is fine.
   - opens 30 seconds after a map loads; after a vote that stays, the
     next one can start 3 minutes later.
+
+ROCK THE GAMEMODE
+Type !rtg (or "rock the gamemode") to ask for a different game mode. Same
+60% and same rules as !rtv. Two short votes follow:
+  1. the game mode - every other mode that has a map to play (up to 8),
+     plus "Stay"
+  2. the map - only maps made for the winning mode (e.g. only am_ maps if
+     arenas won), plus "Keep <current map>" if the current map suits it
+Then the server switches mode and map 5 seconds later, as with !gamemode.
+!unrtg takes your vote back.
 
 
 ADMIN ACCESS
