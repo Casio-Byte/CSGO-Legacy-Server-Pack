@@ -3308,9 +3308,15 @@ void StartRtvVote()
 	vote.ExitButton = false;
 	delete maps;
 
+	if (!vote.DisplayVoteToAll(20))
+	{
+		// Another vote got in first: try again shortly.
+		delete vote;
+		CreateTimer(5.0, Timer_RtvRetry, _, TIMER_FLAG_NO_MAPCHANGE);
+		return;
+	}
 	g_RtvVoteRunning = true;
 	Announce("Rock the vote! Pick the next map (\x0420\x01 seconds).");
-	vote.DisplayVoteToAll(20);
 }
 
 public Action Timer_RtvRetry(Handle timer)
