@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.24.1-20261104"
+#define PLUGIN_VERSION "1.25.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -362,15 +362,17 @@ char g_CfgLive[][] =
 
 char g_CfgDuel[][] =
 {
-	"// 1v1 aim duel. Rounds never end on their own; the plugin handles kills and respawns.",
+	"// 1v1 aim duel: a kill ends the round, both start again at the map's T / CT spawns.",
 	"sv_cheats 0",
 	"bot_quota 0",
 	"bot_kick",
-	"mp_ignore_round_win_conditions 1",
-	"mp_roundtime 60",
-	"mp_roundtime_defuse 60",
-	"mp_roundtime_hostage 60",
-	"mp_freezetime 0",
+	"mp_ignore_round_win_conditions 0",
+	"mp_roundtime 5",
+	"mp_roundtime_defuse 5",
+	"mp_roundtime_hostage 5",
+	"mp_freezetime 1",
+	"mp_round_restart_delay 2",
+	"mp_halftime 0",
 	"mp_buytime 0",
 	"mp_buy_anywhere 0",
 	"mp_startmoney 0",
@@ -2296,6 +2298,18 @@ void StartDuel(int a, int b, int weapon, int target, bool hs)
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/duel.cfg");
 	NoGameEnd();
+	// Real rounds: a kill ends the round and both go back to their spawns
+	// (no respawning in place, so nobody gets spawn-trapped). Set here too,
+	// because a duel.cfg from an older pack has the old rules.
+	ServerCommand("mp_ignore_round_win_conditions 0");
+	ServerCommand("mp_respawn_on_death_ct 0");
+	ServerCommand("mp_respawn_on_death_t 0");
+	ServerCommand("mp_roundtime 5");
+	ServerCommand("mp_roundtime_defuse 5");
+	ServerCommand("mp_roundtime_hostage 5");
+	ServerCommand("mp_freezetime 1");
+	ServerCommand("mp_round_restart_delay 2");
+	ServerCommand("mp_halftime 0");
 	ServerCommand("mp_restartgame 1");
 
 	// Everyone else watches.
@@ -2383,28 +2397,13 @@ public Action Timer_DuelPlace(Handle timer, int serial)
 		return Plugin_Stop;
 	}
 
-	float posA[3], posB[3];
-	PickDuelSpots(posA, posB);
-
-	float dir[3], angA[3], angB[3], zero[3];
-	SubtractVectors(posB, posA, dir);
-	GetVectorAngles(dir, angA);
-	angA[0] = 0.0;
-	angB[1] = angA[1] + 180.0;
-
-	TeleportEntity(a, posA, angA, zero);
-	TeleportEntity(b, posB, angB, zero);
-
+	// Both stay at the map's own T / CT spawns (every round is a real round);
+	// the round's freeze time gives them the same start.
 	ArmDuelist(a);
 	ArmDuelist(b);
 
 	if (g_DuelWeapon != g_DuelRoundWeapon)
 		PrintToChatAll("%sThis round: \x04%s", PREFIX, g_DuelWepName[g_DuelRoundWeapon]);
-
-	// Short freeze so both players start at the same time.
-	FreezeDuelist(a, true);
-	FreezeDuelist(b, true);
-	CreateTimer(1.0, Timer_DuelGo, serial, TIMER_FLAG_NO_MAPCHANGE);
 	return Plugin_Stop;
 }
 
@@ -2462,102 +2461,6 @@ void ArmDuelist(int client)
 	}
 }
 
-/* Picks two spots that can see each other, using the map's deathmatch
-   spawns when it has them, otherwise the normal team spawns. */
-void PickDuelSpots(float posA[3], float posB[3])
-{
-	ArrayList spots = new ArrayList(3);
-	CollectSpots(spots, "info_deathmatch_spawn");
-	if (spots.Length < 2)
-	{
-		CollectSpots(spots, "info_player_terrorist");
-		CollectSpots(spots, "info_player_counterterrorist");
-	}
-
-	if (spots.Length < 2)
-	{
-		// Shouldn't happen on a real map; fall back to the duelists' own spawns.
-		int a, b;
-		GetDuelists(a, b);
-		GetClientAbsOrigin(a, posA);
-		GetClientAbsOrigin(b, posB);
-		delete spots;
-		return;
-	}
-
-	float p1[3], p2[3];
-	bool found = false;
-	int bestI = 0, bestJ = 1;
-
-	for (int attempt = 0; attempt < 300 && !found; attempt++)
-	{
-		int i = GetRandomInt(0, spots.Length - 1);
-		int j = GetRandomInt(0, spots.Length - 1);
-		if (i == j)
-			continue;
-		spots.GetArray(i, p1);
-		spots.GetArray(j, p2);
-
-		float dist = GetVectorDistance(p1, p2);
-		if (dist < 350.0 || dist > 2000.0)
-			continue;
-		if (!CanSee(p1, p2))
-			continue;
-
-		bestI = i;
-		bestJ = j;
-		found = true;
-	}
-
-	if (!found)
-	{
-		// No visible pair — use any two spots that aren't on top of each other.
-		for (int attempt = 0; attempt < 100; attempt++)
-		{
-			bestI = GetRandomInt(0, spots.Length - 1);
-			bestJ = GetRandomInt(0, spots.Length - 1);
-			if (bestI == bestJ)
-				continue;
-			spots.GetArray(bestI, p1);
-			spots.GetArray(bestJ, p2);
-			if (GetVectorDistance(p1, p2) > 300.0)
-				break;
-		}
-	}
-
-	spots.GetArray(bestI, posA);
-	spots.GetArray(bestJ, posB);
-	delete spots;
-}
-
-void CollectSpots(ArrayList list, const char[] cls)
-{
-	int ent = -1;
-	float pos[3];
-	while ((ent = FindEntityByClassname(ent, cls)) != -1)
-	{
-		GetEntPropVector(ent, Prop_Data, "m_vecOrigin", pos);
-		list.PushArray(pos);
-	}
-}
-
-bool CanSee(const float a[3], const float b[3])
-{
-	float eyeA[3], eyeB[3];
-	eyeA = a;
-	eyeB = b;
-	eyeA[2] += 64.0;
-	eyeB[2] += 64.0;
-	Handle tr = TR_TraceRayFilterEx(eyeA, eyeB, MASK_VISIBLE, RayType_EndPoint, TraceFilter_NoPlayers);
-	bool hit = TR_DidHit(tr);
-	delete tr;
-	return !hit;
-}
-
-public bool TraceFilter_NoPlayers(int entity, int contentsMask)
-{
-	return entity > MaxClients;
-}
 
 public void Event_DuelDeath(Event event, const char[] name, bool dontBroadcast)
 {
@@ -2597,7 +2500,8 @@ public void Event_DuelDeath(Event event, const char[] name, bool dontBroadcast)
 		return;
 	}
 
-	CreateTimer(1.5, Timer_DuelNextRound, g_DuelSerial, TIMER_FLAG_NO_MAPCHANGE);
+	// The kill ends the round (one team left); the next round starts both at
+	// their spawns (Event_RoundStart -> DuelNewRound).
 }
 
 public Action Timer_DuelRoundStart(Handle timer)

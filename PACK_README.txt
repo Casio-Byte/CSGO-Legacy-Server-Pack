@@ -238,7 +238,10 @@ in this pack. To get them:
     unpacks it and puts the .bsp (and .nav) in csgo\maps - the same place
     as the official maps, so they load the same way. Maps you already have
     are skipped, so it's safe to run again. Anything it can't get is
-    listed at the end with the reason.
+    listed at the end with the reason. Workshop items are checked first:
+    a wrong ID (e.g. a collection instead of the map), a removed item or a
+    file that isn't a .bsp is reported by name, and varq.net is tried
+    instead. Maps are saved under their real Workshop file name.
     The server only ever changes to a map whose .bsp is really there: if
     one is missing, picking it says so in chat and the server stays on the
     current map (CS:GO would otherwise load the closest official map).
@@ -471,6 +474,9 @@ Match - practice mode
   everyone warms up and challenges each other with !duel. No ready-up,
   knife round, pauses or match commands. While a duel runs, the other
   players spectate; afterwards everyone is back in the lobby.
+  A duel is played in real rounds: a kill ends the round and both players
+  start the next one at the map's own T / CT spawns after a 1 s freeze
+  (no respawning in place, so nobody gets spawn-trapped).
   For lots of 1v1s at the same time, use Multi-1v1 arenas instead.
   Maps: only 1v1 aim maps - the Workshop maps listed in maps\modes\1v1
   (fetched into csgo\maps by download_community_maps.bat) and any aim_ /
@@ -588,7 +594,10 @@ Pick "Retakes" in !gamemode (or as the default mode in start_server.bat
 setup). Every round the bomb is planted on a random site as the round
 starts (insta plant) and the CTs have to retake it. Teams are balanced automatically; players
 waiting for a slot join next round. Up to 9 players (sm_retakes_maxplayers).
-No warmup: rounds start as soon as two players are in.
+No warmup: rounds start as soon as two players are in, and every round
+starts straight away (no freeze time, the bomb is already planted). The
+game's own extra bomb is switched off, so nobody ends up holding a second
+C4 after the plant.
 
   !guns                 pick your guns for each round type, CT and T,
                         and whether you want the AWP on full buys
@@ -621,7 +630,8 @@ kicks in as soon as the reason is gone, even mid-defuse.
 Settings (cfg\sourcemod\retakes\retakes_pack.cfg, made on first start):
   sm_retakes_pistol_rounds 5, sm_retakes_eco_chance 15,
   sm_retakes_halfbuy_chance 25, sm_retakes_fullbuy_chance 60,
-  sm_retakes_instaplant 1, sm_retakes_instadefuse 1
+  sm_retakes_instaplant 1, sm_retakes_instadefuse 1,
+  sm_retakes_instant_start 1 (no freeze time)
   !scramble (admin)     shuffle the teams next round
 
 Spawns come with the pack for 24 maps (de_dust2, mirage, inferno, nuke,

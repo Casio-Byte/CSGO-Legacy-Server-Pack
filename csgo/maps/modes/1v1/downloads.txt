@@ -6,7 +6,7 @@
 aim_redline  workshop:125995702
 aim_map  workshop:122443683
 aim_map_pro  workshop:701833987
-awp_lego_2  workshop:534427561
+awp_lego_2  workshop:487039571
 aim_pillars  workshop:405447392
 awp_india_csgo  workshop:391889933
 aim_biove_texture  workshop:535541366

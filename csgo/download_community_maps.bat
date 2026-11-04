@@ -84,14 +84,26 @@ function Get-Kind([string]$file) {
 
 # Steam Workshop: Steam's public file API gives a direct download link for
 # Workshop items (no login needed).
+# Checks the item really is a map file: a wrong ID (e.g. a collection) or a
+# removed item comes back with Error set, saying what's wrong.
 function Get-WorkshopFile([string]$id) {
     try {
         $r = Invoke-RestMethod -Method Post -Uri 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/' `
              -Body @{ 'itemcount' = '1'; 'publishedfileids[0]' = $id } -TimeoutSec 30 -ErrorAction Stop
-        $d = @($r.response.publishedfiledetails)[0]
-        if ($null -eq $d -or $d.result -ne 1 -or [string]::IsNullOrEmpty($d.file_url)) { return $null }
-        return @{ Url = $d.file_url; Name = $d.filename; Title = $d.title }
-    } catch { return $null }
+    } catch { return @{ Error = "couldn't reach the Steam Workshop ($($_.Exception.Message))" } }
+    $d = @($r.response.publishedfiledetails)[0]
+    if ($null -eq $d -or $d.result -ne 1) { return @{ Error = "Workshop item $id doesn't exist (any more) - wrong ID?" } }
+    if ($d.banned -eq 1 -or $d.banned -eq $true) { return @{ Error = "Workshop item $id ('$($d.title)') was removed from the Workshop" } }
+    $fname = [string]$d.filename
+    if ([string]::IsNullOrEmpty($d.file_url) -or [string]::IsNullOrEmpty($fname)) {
+        return @{ Error = "Workshop item $id ('$($d.title)') isn't a single map file (a collection?) - wrong ID" }
+    }
+    $leaf = ($fname -split '[\\/]')[-1]
+    if ($leaf -notmatch '\.bsp(\.bz2)?$' -and $leaf -notmatch '\.(zip|rar|7z)$') {
+        return @{ Error = "Workshop item $id ('$($d.title)') is '$leaf', not a CS:GO map (.bsp)" }
+    }
+    $base = $leaf -replace '\.bz2$', '' -replace '\.(bsp|zip|rar|7z)$', ''
+    return @{ Url = $d.file_url; Name = $leaf; Base = $base; Title = $d.title }
 }
 
 function Expand-Download([string]$file, [string]$kind, [string]$dest) {
@@ -131,7 +143,7 @@ $defaults = @{
     # 1v1 match aim maps (Steam Workshop)
     '1v1' = @(
         @('aim_redline', 'workshop:125995702'), @('aim_map', 'workshop:122443683'),
-        @('aim_map_pro', 'workshop:701833987'), @('awp_lego_2', 'workshop:534427561'),
+        @('aim_map_pro', 'workshop:701833987'), @('awp_lego_2', 'workshop:487039571'),
         @('aim_pillars', 'workshop:405447392'), @('awp_india_csgo', 'workshop:391889933'),
         @('aim_biove_texture', 'workshop:535541366'), @('aim_crashz_dust_1on1', 'workshop:305726849'),
         @('aim_map_usp_s', 'workshop:270124159'), @('aim_dust_go', 'workshop:127178068'))
@@ -174,6 +186,18 @@ function Update-Lists([string]$mode, [string]$folder) {
         }
     }
 
+    # Known wrong Workshop IDs from older packs (534427561 is a whole
+    # collection of arena maps, not AWP Lego 2).
+    if (Test-Path $dl) {
+        $fixes = @{ 'workshop:534427561' = 'workshop:487039571' }
+        $text = Get-Content $dl
+        $new = $text | ForEach-Object { $l = $_; foreach ($k in $fixes.Keys) { $l = $l -replace [regex]::Escape($k), $fixes[$k] }; $l }
+        if (($new -join "`n") -ne ($text -join "`n")) {
+            Set-Content -Path $dl -Value $new
+            Write-Host "  [list]   $mode\downloads.txt: fixed a wrong Workshop ID" -ForegroundColor DarkGray
+        }
+    }
+
     # downloads.txt: create it if missing
     if (-not (Test-Path $dl)) {
         $lines = @('// Used by download_community_maps.bat - one map per line:',
@@ -200,6 +224,7 @@ foreach ($mode in $modes) {
     $entries = Get-Content $list | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('//') }
 
     foreach ($entry in $entries) {
+        $wsError = $null; $wsName = $null
         $parts = $entry -split '\s+'
         $map   = $parts[0] -replace '\.bsp$', ''
         $page  = if ($parts.Count -gt 1) { $parts[1] } else { $map }
@@ -219,12 +244,16 @@ foreach ($mode in $modes) {
             $wid = $matches[1]
             $pageUrl = "https://steamcommunity.com/sharedfiles/filedetails/?id=$wid"
             $w = Get-WorkshopFile $wid
-            if (-not $w) {
-                Write-Host 'no download from the Workshop' -ForegroundColor Yellow
-                [void]$failed.Add("$mode\$map  (Steam gave no download for Workshop item $wid - subscribe to it in CS:GO Legacy, start the game once, then copy csgo\maps\workshop\$wid\$map.bsp into maps\modes\$mode\)")
-                continue
+            $wsName = $null
+            if ($w.Error) {
+                # Try varq.net under the map's own name before giving up.
+                Write-Host "Workshop: $($w.Error) - trying varq.net ... " -NoNewline -ForegroundColor Yellow
+                $wsError = $w.Error
+                $page = $map
+            } else {
+                $dlUrl = $w.Url
+                $wsName = $w.Base   # the map's real file name on the Workshop
             }
-            $dlUrl = $w.Url
         }
         $slugs = @($page, $map, ($map -replace '_', '-')) | Select-Object -Unique
         if ($dlUrl) { $slugs = @() }
@@ -246,7 +275,11 @@ foreach ($mode in $modes) {
         }
         if (-not $dlUrl) {
             Write-Host 'not found on varq.net' -ForegroundColor Yellow
-            [void]$failed.Add("$mode\$map  (no download file on varq.net - find a CS:GO version elsewhere, e.g. GameBanana)")
+            if ($wsError) {
+                [void]$failed.Add("$mode\$map  ($wsError; not on varq.net either - fix the ID in maps\modes\$mode\downloads.txt, or put the .bsp in csgo\maps)")
+            } else {
+                [void]$failed.Add("$mode\$map  (no download file on varq.net - find a CS:GO version elsewhere, e.g. GameBanana)")
+            }
             continue
         }
 
@@ -272,8 +305,11 @@ foreach ($mode in $modes) {
         $out = Join-Path $temp $map
         if (Test-Path $out) { Remove-Item $out -Recurse -Force }
         if ($kind -eq 'bsp') {
+            # Use the map's real file name from the Workshop when there is one:
+            # a map saved under a different name can fail to load properly.
+            $fileBase = if ($wsName) { $wsName } else { $map }
             New-Item -ItemType Directory -Force -Path $out | Out-Null
-            Copy-Item $archive (Join-Path $out "$map.bsp")
+            Copy-Item $archive (Join-Path $out "$fileBase.bsp")
         }
         elseif (-not (Expand-Download $archive $kind $out)) {
             Write-Host "couldn't unpack ($kind)" -ForegroundColor Yellow

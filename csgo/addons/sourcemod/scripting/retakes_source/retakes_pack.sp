@@ -21,7 +21,7 @@ bool g_PluginTeamSwitch[MAXPLAYERS+1]; // only used by a stock in generic.sp
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PACK_VERSION "1.1.0-20261104"
+#define PACK_VERSION "1.2.0-20261104"
 
 enum RoundType
 {
@@ -73,6 +73,8 @@ ConVar g_cvHalfChance;
 ConVar g_cvFullChance;
 ConVar g_cvInstaPlant;
 ConVar g_cvInstaDefuse;
+ConVar g_cvInstantStart;
+int g_PlantTries = 0;
 
 RoundType g_RoundType = Round_Pistol;
 bool g_DefuseHandled = false;
@@ -104,6 +106,7 @@ public void OnPluginStart()
     g_cvFullChance   = CreateConVar("sm_retakes_fullbuy_chance", "60", "After the pistol rounds: weight of a full buy round", _, true, 0.0);
     g_cvInstaPlant   = CreateConVar("sm_retakes_instaplant", "1", "1 = the bomb is planted as soon as the round starts", _, true, 0.0, true, 1.0);
     g_cvInstaDefuse  = CreateConVar("sm_retakes_instadefuse", "1", "1 = with every T dead, a defuse finishes at once (or the bomb goes off at once if there's no time)", _, true, 0.0, true, 1.0);
+    g_cvInstantStart = CreateConVar("sm_retakes_instant_start", "1", "1 = no freeze time: the round (and the plant) starts straight away", _, true, 0.0, true, 1.0);
     CreateConVar("sm_retakes_pack_version", PACK_VERSION, "Retakes round types version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
     AutoExecConfig(true, "retakes_pack", "sourcemod/retakes");
 
@@ -111,6 +114,7 @@ public void OnPluginStart()
     HookEvent("bomb_begindefuse", Event_BeginDefuse);
     HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_start", Event_RoundStart);
+    HookEvent("round_prestart", Event_RoundPreStart);
 
     for (int i = 1; i <= MaxClients; i++)
     {
@@ -437,6 +441,25 @@ public Action Timer_AnnounceRound(Handle timer)
 
 /* ---------- insta plant ---------- */
 
+// Before every round: the retakes plugin gives the bomb itself, so the game
+// must not give one too (a mode config run again could switch that back on),
+// and no freeze time if the round should start straight away.
+public void Event_RoundPreStart(Event event, const char[] name, bool dontBroadcast)
+{
+    if (!Retakes_Enabled())
+        return;
+    SetCvarInt("mp_give_player_c4", 0);
+    if (g_cvInstantStart.BoolValue)
+        SetCvarInt("mp_freezetime", 0);
+}
+
+void SetCvarInt(const char[] name, int value)
+{
+    ConVar cv = FindConVar(name);
+    if (cv != null && cv.IntValue != value)
+        cv.IntValue = value;
+}
+
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
     g_DefuseHandled = false;
@@ -446,7 +469,12 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 public void Event_FreezeEnd(Event event, const char[] name, bool dontBroadcast)
 {
     if (g_cvInstaPlant.BoolValue && Retakes_Live())
-        CreateTimer(0.1, Timer_InstaPlant, _, TIMER_FLAG_NO_MAPCHANGE);
+    {
+        // With no freeze time this fires before the bomb carrier has the bomb:
+        // keep looking for up to 3 seconds.
+        g_PlantTries = 0;
+        CreateTimer(0.1, Timer_InstaPlant, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+    }
 }
 
 int FindBomber(int &c4)
@@ -476,12 +504,11 @@ public Action Timer_InstaPlant(Handle timer)
     int c4 = -1;
     int bomber = FindBomber(c4);
     if (bomber == -1)
-        return Plugin_Stop;
+        return (++g_PlantTries < 30) ? Plugin_Continue : Plugin_Stop;
 
     float pos[3];
     GetClientAbsOrigin(bomber, pos);
-    RemovePlayerItem(bomber, c4);
-    AcceptEntityInput(c4, "Kill");
+    // The carrier's bomb (and any extra one) is removed by RemoveAllBombs below.
 
     int bomb = CreateEntityByName("planted_c4");
     if (bomb == -1)
@@ -505,7 +532,34 @@ public Action Timer_InstaPlant(Handle timer)
         ev.SetInt("site", view_as<int>(Retakes_GetCurrrentBombsite()));
         ev.Fire();
     }
+    RemoveAllBombs();
     return Plugin_Stop;
+}
+
+// The bomb is planted: no other C4 may be around (e.g. one the game gave too).
+void RemoveAllBombs()
+{
+    int ent = -1;
+    while ((ent = FindEntityByClassname(ent, "weapon_c4")) != -1)
+    {
+        int owner = GetEntPropEnt(ent, Prop_Send, "m_hOwnerEntity");
+        if (owner > 0 && owner <= MaxClients && IsClientInGame(owner))
+        {
+            RemovePlayerItem(owner, ent);
+            // switch away from the empty bomb slot
+            int knife = GetPlayerWeaponSlot(owner, 2);
+            int primary = GetPlayerWeaponSlot(owner, 0);
+            int pistol = GetPlayerWeaponSlot(owner, 1);
+            int to = primary != -1 ? primary : (pistol != -1 ? pistol : knife);
+            if (to != -1)
+            {
+                char cls[32];
+                GetEntityClassname(to, cls, sizeof(cls));
+                FakeClientCommandEx(owner, "use %s", cls);
+            }
+        }
+        AcceptEntityInput(ent, "Kill");
+    }
 }
 
 /* ---------- insta defuse ---------- */

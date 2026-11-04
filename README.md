@@ -119,7 +119,7 @@ Close the server before running it. It lists everything and asks first. By defau
 
 ## Community maps: `download_community_maps.bat`
 
-This downloads the arena maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in `csgo/maps` (the same place as the official maps, so every map loads the same way) and skips maps you already have. The server only changes to a map whose `.bsp` really exists. A missing map is reported in chat instead of CS:GO quietly loading the closest official map.
+This downloads the arena maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, checks each Workshop item really is a map (a wrong ID such as a collection, a removed item or a non-.bsp file is reported, then varq.net is tried), saves it under its real file name in `csgo/maps` (the same place as the official maps, so every map loads the same way) and skips maps you already have. The server only changes to a map whose `.bsp` really exists. A missing map is reported in chat instead of CS:GO quietly loading the closest official map.
 
 ---
 
@@ -148,9 +148,9 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Casual / Arms Race / Demolition | the game's own rules |
 | Deathmatch | **free-for-all**, built on Casual (instant respawn, 2 s spawn protection, one endless round; the game's own DM mode left bots standing still), no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); bots on Expert |
 | Practice | grenade trajectories, impacts, infinite ammo, `!spawn` `!clear` `!god`. All of it (and `sv_cheats`) is reset when any other mode starts. |
-| 1v1 duels | a lobby on Workshop aim maps: one endless respawn round (no warmup) where everyone can `!duel` each other. No ready-up or match commands. |
+| 1v1 duels | a lobby on Workshop aim maps: one endless respawn round (no warmup) where everyone can `!duel` each other. Duels are real rounds: a kill ends the round and both restart at the map's T / CT spawns (no spawn traps). No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
-| Retakes | bomb **insta planted** on a random site as the round starts, CTs retake it. First 5 rounds are **pistol rounds**, then each round is a random **eco**, **half buy** or **full buy** (15/25/60%). `!guns` picks your gun for each round type (CT and T) and the AWP on full buys. **Insta defuse** once every T is dead and none of their fire/grenades can still hit the defuser (or the bomb goes off at once if there isn't time); chat says why when it can't happen yet. Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
+| Retakes | bomb **insta planted** on a random site as the round starts, CTs retake it. First 5 rounds are **pistol rounds**, then each round is a random **eco**, **half buy** or **full buy** (15/25/60%). `!guns` picks your gun for each round type (CT and T) and the AWP on full buys. **Insta defuse** once every T is dead and none of their fire/grenades can still hit the defuser (or the bomb goes off at once if there isn't time); chat says why when it can't happen yet. Spawns included for 24 maps; admins add more with `!edit`. No warmup and no freeze time: every round starts straight away. Only one bomb (the game's own extra C4 is off). |
 
 **No warmup in any mode.** 5v5 / wingman before `!ready` and the 1v1 lobby use a normal endless round with respawns instead (no WARMUP timer); every other mode starts straight away.
 
