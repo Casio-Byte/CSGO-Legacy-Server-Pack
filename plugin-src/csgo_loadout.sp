@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.5.1-20261104"
+#define PLUGIN_VERSION "1.6.0-20261104"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
@@ -253,6 +253,26 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	return APLRes_Success;
 }
 
+// Map change / server shutdown / plugin reload: save everyone first.
+void SaveAllPlayers()
+{
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i) && g_Loaded[i])
+			SavePlayer(i);
+	}
+}
+
+public void OnMapEnd()
+{
+	SaveAllPlayers();
+}
+
+public void OnPluginEnd()
+{
+	SaveAllPlayers();
+}
+
 public void OnPluginStart()
 {
 	CreateConVar("csgo_loadout_version", PLUGIN_VERSION, "CS:GO Loadout version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
@@ -421,6 +441,9 @@ bool HasSkinFor(int client, int def)
 
 public void OnClientDisconnect(int client)
 {
+	// Auto-save on the way out, whatever was changed and however.
+	if (g_Loaded[client] && !IsFakeClient(client))
+		SavePlayer(client);
 	delete g_PreviewTimer[client];
 	g_ThirdPerson[client] = false;
 	ResetPlayer(client);
@@ -2821,6 +2844,8 @@ void ShowMainMenu(int client)
 
 public int Handler_Main(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -2861,6 +2886,8 @@ void ShowResetConfirm(int client)
 
 public int Handler_Reset(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -2922,6 +2949,8 @@ void ShowSlotsMenu(int client)
 
 public int Handler_Slots(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -2966,6 +2995,8 @@ void ShowCategoryMenu(int client)
 
 public int Handler_Category(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3016,6 +3047,8 @@ void ShowWeaponList(int client, int cat)
 
 public int Handler_WeaponList(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3072,6 +3105,8 @@ void ShowWeaponMenu(int client, int def)
 
 public int Handler_WeaponMenu(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3194,6 +3229,8 @@ void ShowSkinList(int client, int def, const char[] filter)
 
 public int Handler_SkinList(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3240,6 +3277,8 @@ void ShowWearMenu(int client)
 
 public int Handler_Wear(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3304,6 +3343,8 @@ void ShowStickerMenu(int client, int def)
 
 public int Handler_StickerMenu(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3361,6 +3402,8 @@ void ShowStickerSlotMenu(int client, int def, int slot)
 
 public int Handler_StickerSlot(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3459,6 +3502,8 @@ void ShowKitResults(int client, ArrayList list, const char[] filter, bool patche
 
 public int Handler_StickerResults(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3510,6 +3555,8 @@ void ShowKnifeMenu(int client)
 
 public int Handler_Knife(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3563,6 +3610,8 @@ void ShowGloveMenu(int client)
 
 public int Handler_GloveMenu(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3618,6 +3667,8 @@ void ShowGloveTypes(int client)
 
 public int Handler_GloveTypes(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3666,6 +3717,8 @@ void ShowGloveSkins(int client, int def)
 
 public int Handler_GloveSkins(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3711,6 +3764,8 @@ void ShowAgentTeamMenu(int client)
 
 public int Handler_AgentTeam(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3757,6 +3812,8 @@ void ShowAgentList(int client, int team)
 
 public int Handler_AgentList(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3824,6 +3881,8 @@ void ShowPatchMenu(int client)
 
 public int Handler_PatchMenu(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3860,6 +3919,8 @@ void ShowPatchSlotMenu(int client)
 
 public int Handler_PatchSlot(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3889,6 +3950,8 @@ public int Handler_PatchSlot(Menu menu, MenuAction action, int client, int item)
 
 public int Handler_PatchResults(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -3977,6 +4040,8 @@ void ShowPresetMenu(int client)
 
 public int Handler_PresetList(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 		delete menu;
 	else if (action == MenuAction_Select)
@@ -4047,6 +4112,8 @@ void ShowPresetDetail(int client, const char[] name)
 
 public int Handler_PresetDetail(Menu menu, MenuAction action, int client, int item)
 {
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
+		SavePlayer(client); // menu closed: auto-save
 	if (action == MenuAction_End)
 		delete menu;
 	else if (action == MenuAction_Select)

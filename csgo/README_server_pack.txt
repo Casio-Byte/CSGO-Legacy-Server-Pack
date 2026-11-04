@@ -294,7 +294,10 @@ WHAT GETS CREATED AUTOMATICALLY
   cfg\csgo_match\wingman.cfg                                    (2v2 settings)
   cfg\csgo_match\arena.cfg                                    (1v1 arenas)
   cfg\sourcemod\csgo_match.cfg                                 (match settings)
-  addons\sourcemod\data\csgo_loadout\<steamid>.cfg             (one per player)
+  addons\sourcemod\data\csgo_loadout\<steamid>.cfg             (one per player;
+                                     saved automatically when you close a
+                                     loadout menu, leave the server or the
+                                     map changes)
   addons\sourcemod\data\csgo_match_options.txt                 (!options choices)
   addons\sourcemod\data\csgo_match_admins.txt                  (PCs logged in with /login)
 

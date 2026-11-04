@@ -266,7 +266,7 @@ Each set skins **all 34 guns** (pistols, SMGs, rifles, snipers, shotguns and mac
 - Skins, wear, pattern, StatTrak, name tag and **stickers** (with wear) on any weapon or knife.
 - **Doppler / Gamma Doppler phases** are named: Ruby, Sapphire, Black Pearl, Phase 1-4 and Emerald.
 - The full loadout is applied as soon as it loads, even mid-round after a map change.
-- Saved per player in `addons/sourcemod/data/csgo_loadout/<STEAM_0_x_y or ip_x_x_x_x>.cfg`.
+- Saved per player in `addons/sourcemod/data/csgo_loadout/<STEAM_0_x_y or ip_x_x_x_x>.cfg`, automatically whenever you close a loadout menu, leave the server or the map changes. The `!guns` picks in Retakes and Arenas are saved per player too (SourceMod client settings).
 - Item data is read from the server's `items_game.txt`. Names come from `csgo_english.txt` (copy it from the game's `csgo/resource` folder for proper names).
 - `core.cfg` needs `FollowCSGOServerGuidelines "no"` and `SteamAuthstringValidation "no"` (both preset).
 
