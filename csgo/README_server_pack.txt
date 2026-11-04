@@ -602,6 +602,9 @@ No warmup: rounds start as soon as two players are in. Each round has a
 it rounds end in a loop); the bomb is planted the moment it ends, so
 everyone can move from the moment the bomb is down. Nobody is given a C4
 (sm_retakes_give_bomb 0) and the game's own one is switched off.
+On your own (only one player): no retakes rounds - you respawn, there's
+no bomb and the round doesn't end, so you can practise. Normal retakes
+start the round after a second player joins.
 
   !guns                 pick your guns for each round type, CT and T,
                         and whether you want the AWP on full buys

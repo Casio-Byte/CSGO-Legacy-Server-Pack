@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.6.0-20261104"
+#define PLUGIN_VERSION "1.6.1-20261104"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
@@ -608,9 +608,16 @@ bool IsKnifeDef(int def)
 // The game is about to give a default knife: give the chosen one instead.
 public Action PTaH_OnGiveNamedItemPre(int client, char classname[64], CEconItemView &item, bool &ignoredView, bool &originNull, float origin[3])
 {
-	if (!IsValidHuman(client) || !g_Loaded[client] || g_Knife[client] == 0)
-		return Plugin_Continue;
 	if (!StrEqual(classname, "weapon_knife") && !StrEqual(classname, "weapon_knife_t"))
+		return Plugin_Continue;
+	if (client <= 0 || client > MaxClients || !IsClientInGame(client))
+		return Plugin_Continue;
+	// Already holding a knife (e.g. Retakes gives one, then the game gives its
+	// spawn knife too): a second one can't go in the slot and would land on the
+	// floor as an unskinned copy - don't give it at all.
+	if (FindKnife(client) != -1)
+		return Plugin_Handled;
+	if (!IsValidHuman(client) || !g_Loaded[client] || g_Knife[client] == 0)
 		return Plugin_Continue;
 	WeaponInfo w;
 	if (!GetWeaponByDef(g_Knife[client], w))

@@ -21,7 +21,7 @@ bool g_PluginTeamSwitch[MAXPLAYERS+1]; // only used by a stock in generic.sp
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PACK_VERSION "1.3.0-20261104"
+#define PACK_VERSION "1.4.0-20261104"
 
 enum RoundType
 {
@@ -75,6 +75,7 @@ ConVar g_cvInstaPlant;
 ConVar g_cvInstaDefuse;
 ConVar g_cvInstantStart;
 int g_PlantTries = 0;
+bool g_Solo = false;   // only one player: no retakes rounds, just practise until someone joins
 
 RoundType g_RoundType = Round_Pistol;
 bool g_DefuseHandled = false;
@@ -430,6 +431,12 @@ public Action Timer_AnnounceRound(Handle timer)
 {
     if (!Retakes_Enabled())
         return Plugin_Stop;
+    if (g_Solo)
+    {
+        Retakes_MessageToAll("You're the only player - {GREEN}retakes start when a second player joins{NORMAL}. Until then: respawns, no bomb, the round doesn't end.");
+        PrintCenterTextAll("Waiting for a second player");
+        return Plugin_Stop;
+    }
     int played = Retakes_GetRetakeRoundsPlayed();
     if (g_RoundType == Round_Pistol && g_cvPistolRounds.IntValue > 0)
         Retakes_MessageToAll("{GREEN}%s{NORMAL} (%d of %d) - type {GREEN}!guns{NORMAL} to pick your weapons.", g_RoundNames[g_RoundType], played + 1, g_cvPistolRounds.IntValue);
@@ -449,11 +456,43 @@ public void Event_RoundPreStart(Event event, const char[] name, bool dontBroadca
     if (!Retakes_Enabled())
         return;
     SetCvarInt("mp_give_player_c4", 0);
+    UpdateSolo();
     // Not 0: retakes moves players between teams as the round starts, and
     // without a freeze period the game ends the round on the spot (a team is
     // empty for a moment) - rounds then end in a loop.
     if (g_cvInstantStart.BoolValue)
         SetCvarInt("mp_freezetime", 1);
+}
+
+/* One player alone can't play a retake (no one to plant for, or no one to
+   retake against), and rounds kept ending. With fewer than 2 players the
+   round never ends, you respawn, and there's no bomb - normal retakes start
+   the round after a second player joins (retakes ends the round for that). */
+int JoinedHumans()
+{
+    int n = 0;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i) && !IsFakeClient(i) && Retakes_IsJoined(i))
+            n++;
+    }
+    return n;
+}
+
+void UpdateSolo()
+{
+    bool solo = JoinedHumans() < 2;
+    if (solo == g_Solo)
+        return;
+    g_Solo = solo;
+    SetCvarInt("mp_ignore_round_win_conditions", solo ? 1 : 0);
+    SetCvarInt("mp_respawn_on_death_t", solo ? 1 : 0);
+    SetCvarInt("mp_respawn_on_death_ct", solo ? 1 : 0);
+}
+
+public void OnMapStart()
+{
+    g_Solo = false;
 }
 
 void SetCvarInt(const char[] name, int value)
@@ -472,7 +511,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 // The freeze ends = players can move: the bomb goes down at that same moment.
 public void Event_FreezeEnd(Event event, const char[] name, bool dontBroadcast)
 {
-    if (!g_cvInstaPlant.BoolValue || !Retakes_Live())
+    if (!g_cvInstaPlant.BoolValue || !Retakes_Live() || g_Solo)
         return;
     if (TryInstaPlant())
         return;
@@ -695,7 +734,7 @@ bool ThreatLeft(int bomb, char[] what, int maxlen)
 
 public Action Timer_CheckDefuse(Handle timer, any explain)
 {
-    if (g_DefuseHandled)
+    if (g_DefuseHandled || g_Solo)
         return Plugin_Stop;
     if (!Retakes_Live())
     {
