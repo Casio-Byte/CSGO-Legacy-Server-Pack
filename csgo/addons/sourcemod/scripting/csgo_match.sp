@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.27.0-20261104"
+#define PLUGIN_VERSION "1.27.1-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -956,6 +956,7 @@ void StartKnife()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/knife.cfg");
+	NoWarmup(); // after the cfg, so it can't switch warmup back on
 	ServerCommand("mp_restartgame 1");
 
 	Announce("\x02KNIFE ROUND\x01 — the winners choose their side.");
@@ -980,6 +981,7 @@ void StartLive()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/live.cfg");
+	NoWarmup(); // after the cfg, so it can't switch warmup back on
 	if (IsWingman())
 		ServerCommand("exec csgo_match/wingman.cfg");
 	if (g_cvMaxRounds.IntValue > 0)
@@ -1595,6 +1597,7 @@ void EnterPractice()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/prac.cfg");
+	NoWarmup(); // after the cfg, so it can't switch warmup back on
 	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 
@@ -1874,6 +1877,17 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 // Practice-type modes never end the game by themselves. (mp_maxrounds 0 is NOT
 // "no limit" in CS:GO - the game ends after the first round - so older configs
 // written with 0 are overridden here.)
+/* The game's competitive cfg (run at every map load) turns warmup on, and a
+   restart or "game commencing" (players rejoining after a map change, e.g.
+   from !rtv) would then start one. This pack never uses the game's warmup. */
+void NoWarmup()
+{
+	ServerCommand("mp_do_warmup_period 0");
+	ServerCommand("mp_warmuptime 0");
+	ServerCommand("mp_warmup_pausetimer 0");
+	ServerCommand("mp_warmup_end");
+}
+
 void NoGameEnd()
 {
 	ServerCommand("mp_maxrounds 999");
@@ -2300,6 +2314,7 @@ void StartDuel(int a, int b, int weapon, int target, bool hs)
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/duel.cfg");
+	NoWarmup(); // after the cfg, so it can't switch warmup back on
 	NoGameEnd();
 	// Real rounds: a kill ends the round and both go back to their spawns
 	// (no respawning in place, so nobody gets spawn-trapped). Set here too,
@@ -5103,6 +5118,7 @@ void EnterArena()
 	ServerCommand("mp_unpause_match");
 	ServerCommand("mp_warmup_end");
 	ServerCommand("exec csgo_match/arena.cfg");
+	NoWarmup(); // after the cfg, so it can't switch warmup back on
 	NoGameEnd();
 	ServerCommand("mp_restartgame 1");
 
