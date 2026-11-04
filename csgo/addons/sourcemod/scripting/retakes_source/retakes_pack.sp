@@ -21,7 +21,7 @@ bool g_PluginTeamSwitch[MAXPLAYERS+1]; // only used by a stock in generic.sp
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PACK_VERSION "1.2.0-20261104"
+#define PACK_VERSION "1.3.0-20261104"
 
 enum RoundType
 {
@@ -106,7 +106,7 @@ public void OnPluginStart()
     g_cvFullChance   = CreateConVar("sm_retakes_fullbuy_chance", "60", "After the pistol rounds: weight of a full buy round", _, true, 0.0);
     g_cvInstaPlant   = CreateConVar("sm_retakes_instaplant", "1", "1 = the bomb is planted as soon as the round starts", _, true, 0.0, true, 1.0);
     g_cvInstaDefuse  = CreateConVar("sm_retakes_instadefuse", "1", "1 = with every T dead, a defuse finishes at once (or the bomb goes off at once if there's no time)", _, true, 0.0, true, 1.0);
-    g_cvInstantStart = CreateConVar("sm_retakes_instant_start", "1", "1 = no freeze time: the round (and the plant) starts straight away", _, true, 0.0, true, 1.0);
+    g_cvInstantStart = CreateConVar("sm_retakes_instant_start", "1", "1 = 1 s freeze time (the least retakes needs to set up the teams - 0 makes rounds end in a loop); the bomb is planted the moment it ends", _, true, 0.0, true, 1.0);
     CreateConVar("sm_retakes_pack_version", PACK_VERSION, "Retakes round types version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
     AutoExecConfig(true, "retakes_pack", "sourcemod/retakes");
 
@@ -449,8 +449,11 @@ public void Event_RoundPreStart(Event event, const char[] name, bool dontBroadca
     if (!Retakes_Enabled())
         return;
     SetCvarInt("mp_give_player_c4", 0);
+    // Not 0: retakes moves players between teams as the round starts, and
+    // without a freeze period the game ends the round on the spot (a team is
+    // empty for a moment) - rounds then end in a loop.
     if (g_cvInstantStart.BoolValue)
-        SetCvarInt("mp_freezetime", 0);
+        SetCvarInt("mp_freezetime", 1);
 }
 
 void SetCvarInt(const char[] name, int value)
@@ -466,15 +469,16 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
     g_ThreatWarned = false;
 }
 
+// The freeze ends = players can move: the bomb goes down at that same moment.
 public void Event_FreezeEnd(Event event, const char[] name, bool dontBroadcast)
 {
-    if (g_cvInstaPlant.BoolValue && Retakes_Live())
-    {
-        // With no freeze time this fires before the bomb carrier has the bomb:
-        // keep looking for up to 3 seconds.
-        g_PlantTries = 0;
-        CreateTimer(0.1, Timer_InstaPlant, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-    }
+    if (!g_cvInstaPlant.BoolValue || !Retakes_Live())
+        return;
+    if (TryInstaPlant())
+        return;
+    // Bomb carrier not ready yet (e.g. a late join): keep trying for 3 seconds.
+    g_PlantTries = 0;
+    CreateTimer(0.1, Timer_InstaPlant, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 }
 
 int FindBomber(int &c4)
@@ -501,10 +505,38 @@ public Action Timer_InstaPlant(Handle timer)
 {
     if (!Retakes_Live() || FindEntityByClassname(-1, "planted_c4") != -1)
         return Plugin_Stop;
+    if (TryInstaPlant())
+        return Plugin_Stop;
+    return (++g_PlantTries < 30) ? Plugin_Continue : Plugin_Stop;
+}
+
+// Who to plant for: the player retakes picked as bomb carrier (they spawn on
+// the site, without a C4), else whoever holds a C4, else any live T.
+int PickPlanter()
+{
+    int owner = Retakes_GetBombOwner();
+    if (owner > 0 && owner <= MaxClients && IsClientInGame(owner) && IsPlayerAlive(owner)
+        && GetClientTeam(owner) == CS_TEAM_T)
+        return owner;
     int c4 = -1;
-    int bomber = FindBomber(c4);
+    int holder = FindBomber(c4);
+    if (holder != -1)
+        return holder;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == CS_TEAM_T)
+            return i;
+    }
+    return -1;
+}
+
+bool TryInstaPlant()
+{
+    if (FindEntityByClassname(-1, "planted_c4") != -1)
+        return true;
+    int bomber = PickPlanter();
     if (bomber == -1)
-        return (++g_PlantTries < 30) ? Plugin_Continue : Plugin_Stop;
+        return false;
 
     float pos[3];
     GetClientAbsOrigin(bomber, pos);
@@ -512,7 +544,7 @@ public Action Timer_InstaPlant(Handle timer)
 
     int bomb = CreateEntityByName("planted_c4");
     if (bomb == -1)
-        return Plugin_Stop;
+        return false;
     ConVar cvTimer = FindConVar("mp_c4timer");
     float length = cvTimer != null ? cvTimer.FloatValue : 40.0;
 
@@ -533,7 +565,7 @@ public Action Timer_InstaPlant(Handle timer)
         ev.Fire();
     }
     RemoveAllBombs();
-    return Plugin_Stop;
+    return true;
 }
 
 // The bomb is planted: no other C4 may be around (e.g. one the game gave too).

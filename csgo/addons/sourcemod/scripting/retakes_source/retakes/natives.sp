@@ -19,6 +19,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     CreateNative("Retakes_InWarmup", Native_InWarmup);
     CreateNative("Retakes_Enabled", Native_Enabled);
     CreateNative("Retakes_GetMaxPlayers", Native_GetMaxPlayers);
+    CreateNative("Retakes_GetBombOwner", Native_GetBombOwner);
     RegPluginLibrary("retakes");
     return APLRes_Success;
 }
@@ -171,6 +172,10 @@ public int Native_InWarmup(Handle plugin, int numParams) {
 
 public int Native_Enabled(Handle plugin, int numParams) {
     return g_Enabled;
+}
+
+public int Native_GetBombOwner(Handle plugin, int numParams) {
+    return g_BombOwner;
 }
 
 public int Native_GetMaxPlayers(Handle plugin, int numParams) {

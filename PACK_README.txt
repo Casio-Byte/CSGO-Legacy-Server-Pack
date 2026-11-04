@@ -591,13 +591,14 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
 RETAKES
 -------
 Pick "Retakes" in !gamemode (or as the default mode in start_server.bat
-setup). Every round the bomb is planted on a random site as the round
-starts (insta plant) and the CTs have to retake it. Teams are balanced automatically; players
+setup). Nobody carries a bomb: every round it's already planted on a
+random site (insta plant) and the CTs have to retake it. Teams are balanced automatically; players
 waiting for a slot join next round. Up to 9 players (sm_retakes_maxplayers).
-No warmup: rounds start as soon as two players are in, and every round
-starts straight away (no freeze time, the bomb is already planted). The
-game's own extra bomb is switched off, so nobody ends up holding a second
-C4 after the plant.
+No warmup: rounds start as soon as two players are in. Each round has a
+1-second freeze (retakes needs it to put players on their teams - without
+it rounds end in a loop); the bomb is planted the moment it ends, so
+everyone can move from the moment the bomb is down. Nobody is given a C4
+(sm_retakes_give_bomb 0) and the game's own one is switched off.
 
   !guns                 pick your guns for each round type, CT and T,
                         and whether you want the AWP on full buys
@@ -618,7 +619,8 @@ round is a random eco (15%), half buy (25%) or full buy (60%):
                 CT: M4A4 / M4A1-S / AUG   T: AK-47 / SG 553
   CTs always get a defuse kit. Skins from !ws still apply.
 
-Insta plant: the bomb is planted the moment the round starts.
+Insta plant: the bomb is planted on the site, where the T picked as bomb
+carrier spawns, the moment the freeze ends.
 Insta defuse: once every T is dead (and none of the Ts' fire near the bomb
 or grenades in the air can still hit the defuser - the CTs' own can't, as
 friendly fire is off), a defuse finishes straight away if there's enough
@@ -631,7 +633,7 @@ Settings (cfg\sourcemod\retakes\retakes_pack.cfg, made on first start):
   sm_retakes_pistol_rounds 5, sm_retakes_eco_chance 15,
   sm_retakes_halfbuy_chance 25, sm_retakes_fullbuy_chance 60,
   sm_retakes_instaplant 1, sm_retakes_instadefuse 1,
-  sm_retakes_instant_start 1 (no freeze time)
+  sm_retakes_instant_start 1 (1 s freeze), sm_retakes_give_bomb 0
   !scramble (admin)     shuffle the teams next round
 
 Spawns come with the pack for 24 maps (de_dust2, mirage, inferno, nuke,

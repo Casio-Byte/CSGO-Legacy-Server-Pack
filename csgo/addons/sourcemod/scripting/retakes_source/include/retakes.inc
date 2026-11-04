@@ -166,6 +166,13 @@ native int Retakes_GetNumActivePlayers();
 native Bombsite Retakes_GetCurrrentBombsite();
 
 /**
+ * Returns the player picked to carry the bomb this round (-1 if none).
+ * CS:GO server pack addition: with sm_retakes_give_bomb 0 they don't get a C4,
+ * but spawn on the site where the bomb is planted.
+ */
+native int Retakes_GetBombOwner();
+
+/**
  * Returns the round points for a client in the current round.
  */
 native int Retakes_GetRoundPoints(int client);
@@ -256,6 +263,7 @@ public __pl_retakes_SetNTVOptional() {
     MarkNativeAsOptional("Retakes_GetNumActiveCTs");
     MarkNativeAsOptional("Retakes_GetNumActivePlayers");
     MarkNativeAsOptional("Retakes_GetCurrrentBombsite");
+    MarkNativeAsOptional("Retakes_GetBombOwner");
     MarkNativeAsOptional("Retakes_GetRoundPoints");
     MarkNativeAsOptional("Retakes_SetRoundPoints");
     MarkNativeAsOptional("Retakes_ChangeRoundPoints");

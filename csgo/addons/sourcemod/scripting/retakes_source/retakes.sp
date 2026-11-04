@@ -47,6 +47,7 @@ ArrayList g_hRankingQueue;
 
 /** ConVar handles **/
 ConVar g_EnabledCvar;
+ConVar g_hGiveBomb; // CS:GO server pack
 ConVar g_hAutoTeamsCvar;
 ConVar g_hCvarVersion;
 ConVar g_hEditorEnabled;
@@ -146,6 +147,7 @@ public void OnPluginStart() {
 
     /** ConVars **/
     g_EnabledCvar = CreateConVar("sm_retakes_enabled", "0", "Whether the plugin is enabled (set by the CS:GO Match plugin's Retakes mode)", FCVAR_DONTRECORD);
+    g_hGiveBomb = CreateConVar("sm_retakes_give_bomb", "0", "1 = the bomb carrier gets the C4 and plants it; 0 = nobody gets a C4 - retakes_pack plants it on site as the round starts");
     g_hAutoTeamsCvar = CreateConVar("sm_retakes_auto_set_teams", "1", "Whether retakes is allowed to automanage team balance");
     g_hEditorEnabled = CreateConVar("sm_retakes_editor_enabled", "1", "Whether the editor can be launched by admins");
     g_hMaxPlayers = CreateConVar("sm_retakes_maxplayers", "9", "Maximum number of players allowed in the game at once.", _, true, 2.0);

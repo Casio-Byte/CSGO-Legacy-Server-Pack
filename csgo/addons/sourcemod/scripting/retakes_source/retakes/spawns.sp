@@ -187,7 +187,9 @@ public void GiveWeapons(int client) {
         GivePlayerItem(client, weapon);
     }
 
-    if (g_BombOwner == client) {
+    // CS:GO server pack: with sm_retakes_give_bomb 0 nobody carries a C4;
+    // retakes_pack plants it where the bomb carrier spawned.
+    if (g_BombOwner == client && g_hGiveBomb.BoolValue) {
         g_bombPlantSignal = false;
         GivePlayerItem(client, "weapon_c4");
         CreateTimer(1.0, Timer_StartPlant, client);
