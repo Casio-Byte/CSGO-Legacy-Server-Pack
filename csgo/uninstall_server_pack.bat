@@ -58,7 +58,7 @@ $csgo = $env:CSGO_DIR.TrimEnd('\', '/')
 # Everything the pack (and its launcher/plugins) adds. Paths are relative to csgo\.
 $items = @(
     @('addons\metamod',                     'Metamod:Source'),
-    @('addons\sourcemod',                   'SourceMod, all plugins, extensions, player loadouts and logs'),
+    @('addons\sourcemod',                   'SourceMod, all plugins, extensions and logs (player loadouts: you choose below)'),
     @('addons\metamod.vdf',                 'Metamod loader'),
     @('addons\metamod_x64.vdf',             'Metamod 64-bit loader (old)'),
     @('cfg\sourcemod',                      'SourceMod settings'),
@@ -133,6 +133,20 @@ if (Test-Path (Join-Path $csgo 'start_server.bat')) {
     $a = Read-Host 'without Metamod, SourceMod and the plugins? (Y/N) [N]'
     $keepLauncher = ($a -match '^[Yy]')
 }
+# Players' saved preferences: kept in place (default), so a reinstall finds them again.
+$prefItems = @('addons\sourcemod\data\csgo_loadout',                 # skins, knives, gloves, agents, stickers, default weapons
+               'addons\sourcemod\data\sqlite\clientprefs-sqlite.sq3') # !guns picks (Retakes, Arenas) and other per-player settings
+$prefFound = @($prefItems | Where-Object { Test-Path (Join-Path $csgo $_) })
+$keepPrefs = $false
+if ($prefFound.Count -gt 0) {
+    $nPlayers = @(Get-ChildItem (Join-Path $csgo 'addons\sourcemod\data\csgo_loadout') -Filter '*.cfg' -File -ErrorAction SilentlyContinue).Count
+    Write-Host ''
+    Write-Host "Keep the players' skin / loadout preferences ($nPlayers saved loadouts, plus their"
+    Write-Host '!guns picks)? They stay where they are, so if you reinstall the pack everyone'
+    $a = Read-Host 'has their skins back. (Y/N) [Y]'
+    $keepPrefs = -not ($a -match '^[Nn]')
+}
+
 $keepFiles = @('start_server.bat', 'start_fastdl.bat', 'download_community_maps.bat', 'launcher_settings.cmd',
                'cfg\server.cfg', 'cfg\csgo_match\server_settings.cfg', 'cfg\csgo_match\fastdl.cfg')
 if ($keepLauncher) {
@@ -172,6 +186,17 @@ if (-not $delete) {
     New-Item -ItemType Directory -Force -Path $backup | Out-Null
 }
 
+# Set the preferences aside while addons\sourcemod is removed, then put them back.
+$hold = $null
+if ($keepPrefs) {
+    $hold = Join-Path ([IO.Path]::GetTempPath()) ('csgo_pack_prefs_' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    foreach ($rel in $prefFound) {
+        $dst = Join-Path $hold $rel
+        New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
+        Copy-Item -LiteralPath (Join-Path $csgo $rel) -Destination $dst -Recurse -Force
+    }
+}
+
 $failed = 0
 foreach ($rel in $list) {
     $src = Join-Path $csgo $rel
@@ -188,6 +213,21 @@ foreach ($rel in $list) {
         $failed++
         Write-Host "  FAILED   $rel  ($($_.Exception.Message))" -ForegroundColor Yellow
     }
+}
+
+if ($keepPrefs -and $hold) {
+    $restored = 0
+    foreach ($rel in $prefFound) {
+        $src = Join-Path $hold $rel
+        $dst = Join-Path $csgo $rel
+        if (-not (Test-Path $src)) { continue }
+        if (Test-Path $dst) { $restored++; continue }   # wasn't removed (e.g. an item failed)
+        New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
+        try { Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force -ErrorAction Stop; $restored++ }
+        catch { Write-Host "  couldn't put back $rel - a copy is in $hold" -ForegroundColor Yellow; $hold = $null }
+    }
+    if ($hold) { Remove-Item -LiteralPath $hold -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host '  kept     player skin / loadout preferences (addons\sourcemod\data)' -ForegroundColor DarkGray
 }
 
 # Empty folders the pack created.

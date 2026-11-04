@@ -164,7 +164,7 @@ if you want those maps. Its start.bat is replaced by start_server.bat.
 UNINSTALL / BACK TO PLAIN CS:GO
 -------------------------------
   csgo\uninstall_server_pack.bat removes everything this pack added:
-  Metamod, SourceMod (plugins, extensions, player loadouts, logs), the
+  Metamod, SourceMod (plugins, extensions, logs), the
   pack's cfgs (cfg\csgo_match, cfg\sourcemod, server.cfg, ESL cfgs),
   GameModes_Server.txt, the spray images, the launcher/FastDL/downloader
   scripts and launcher_settings.cmd. It also offers to remove the Windows
@@ -172,6 +172,10 @@ UNINSTALL / BACK TO PLAIN CS:GO
   - Close the server first.
   - It lists everything and asks before doing anything.
   - Community maps (maps\modes) are kept unless you say otherwise.
+  - Players' skin / loadout preferences are kept unless you say no: their
+    saved loadouts (addons\sourcemod\data\csgo_loadout) and !guns picks
+    (addons\sourcemod\data\sqlite\clientprefs-sqlite.sq3) stay where they
+    are, so if you reinstall the pack everyone has their skins back.
   - Default: everything is MOVED to csgo\_server_pack_backup_<date>, so
     you can undo it by moving it back. Choose "delete" (and type DELETE)
     to remove it for good.
