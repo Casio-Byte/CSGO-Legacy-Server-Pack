@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.4.0-20261103"
+#define PLUGIN_VERSION "1.4.1-20261104"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
@@ -1925,12 +1925,18 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	if (g_ThirdPerson[client])
 		SetThirdPerson(client, false);
 
+	// The knife retry limit is per life: in Deathmatch you can respawn twice
+	// within 5 seconds, which used up the tries and left the default knife.
+	g_KnifeTries[client] = 0;
+	g_LastKnifeGive[client] = 0.0;
+
 	// Drop the default arms straight away so they never draw under custom gloves.
 	if (g_Loaded[client] && g_GloveDef[client] != 0 && g_GlovePaint[client] != 0)
 		SetEntPropString(client, Prop_Send, "m_szArmsModel", "");
 
 	CreateTimer(0.1, Timer_ApplyPlayer, userid, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(1.0, Timer_CheckKnife, userid, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(2.5, Timer_CheckKnife, userid, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 public Action Timer_ApplyPlayer(Handle timer, int userid)

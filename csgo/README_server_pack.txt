@@ -362,9 +362,10 @@ Game modes (admins)
   to the default game mode and first map picked in start_server.bat setup.
   In Casual, Deathmatch, Arms Race and Demolition the game runs its own
   rules; the ready-up commands only apply in Competitive and Wingman.
-  Deathmatch is free-for-all (everyone against everyone, random spawns).
-  Everyone spawns with a knife, AK-47 and Desert Eagle (with their own
-  skins) and the buy menu is off. Turn the fixed guns off with
+  Deathmatch is free-for-all (everyone against everyone, random spawns),
+  with no bonus weapon rounds. Everyone spawns with a knife, AK-47 and
+  Desert Eagle (with their own skins) and the buy menu is off.
+  Bots play on Expert in every mode (bot_difficulty 3 in server.cfg). Turn the fixed guns off with
   match_dm_loadout 0.
   Every mode: no team-select screen after a map loads - players are put
   on the smaller team automatically (M still opens the menu to switch).

@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.14.0-20261104"
+#define PLUGIN_VERSION "1.15.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -1707,9 +1707,11 @@ public Action Timer_DmLoadout(Handle timer, any userid)
 	if (client == 0 || !IsClientInGame(client) || !IsPlayerAlive(client) || !DmLoadoutOn())
 		return Plugin_Stop;
 
+	bool changed = false;
 	int prim = GetPlayerWeaponSlot(client, 0);
 	if (prim == -1 || GetEntProp(prim, Prop_Send, "m_iItemDefinitionIndex") != 7) // 7 = AK-47
 	{
+		changed = true;
 		if (prim != -1)
 		{
 			RemovePlayerItem(client, prim);
@@ -1721,6 +1723,7 @@ public Action Timer_DmLoadout(Handle timer, any userid)
 	int secDef = sec != -1 ? GetEntProp(sec, Prop_Send, "m_iItemDefinitionIndex") : 0;
 	if (secDef != 1 && secDef != 64) // Desert Eagle (or the R8 if picked in !loadout)
 	{
+		changed = true;
 		if (sec != -1)
 		{
 			RemovePlayerItem(client, sec);
@@ -1730,6 +1733,10 @@ public Action Timer_DmLoadout(Handle timer, any userid)
 	}
 	if (GetPlayerWeaponSlot(client, 2) == -1)
 		GivePlayerItem(client, "weapon_knife");
+	// Never leave anyone holding nothing (bots stand still without a weapon out).
+	int active = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	if (changed || active == -1 || !IsValidEntity(active))
+		FakeClientCommandEx(client, "use weapon_ak47");
 	return Plugin_Stop;
 }
 
@@ -2920,7 +2927,15 @@ char g_DmFfaCvars[][][] =
 {
 	{ "mp_teammates_are_enemies", "1" },
 	{ "mp_dm_teammode", "0" },
-	{ "mp_randomspawn", "1" }
+	{ "mp_randomspawn", "1" },
+	// no bonus weapon rounds
+	{ "mp_dm_bonus_length_min", "0" },
+	{ "mp_dm_bonus_length_max", "0" },
+	{ "mp_dm_time_between_bonus_min", "99999" },
+	{ "mp_dm_time_between_bonus_max", "99999" },
+	{ "mp_dm_bonus_percent", "0" },
+	// bots on Expert
+	{ "bot_difficulty", "3" }
 };
 char g_DmLoadoutCvars[][][] =
 {
@@ -2929,9 +2944,7 @@ char g_DmLoadoutCvars[][][] =
 	{ "mp_t_default_primary", "weapon_ak47" },
 	{ "mp_ct_default_primary", "weapon_ak47" },
 	{ "mp_t_default_secondary", "weapon_deagle" },
-	{ "mp_ct_default_secondary", "weapon_deagle" },
-	{ "mp_t_default_melee", "weapon_knife" },
-	{ "mp_ct_default_melee", "weapon_knife" }
+	{ "mp_ct_default_secondary", "weapon_deagle" }
 };
 
 void DmSetCvar(const char[] name, const char[] value)
@@ -2957,8 +2970,24 @@ void DmApply()
 		DmRestore();
 		return;
 	}
+	ConVar diff = FindConVar("bot_difficulty");
+	bool reAddBots = diff != null && diff.IntValue != 3;
 	for (int i = 0; i < sizeof(g_DmFfaCvars); i++)
 		DmSetCvar(g_DmFfaCvars[i][0], g_DmFfaCvars[i][1]);
+	// Bots must move and shoot (left-over practice / test settings could freeze them).
+	char freeze[][] = { "bot_stop", "bot_zombie", "bot_dont_shoot", "bot_freeze" };
+	for (int i = 0; i < sizeof(freeze); i++)
+	{
+		ConVar cv = FindConVar(freeze[i]);
+		if (cv != null && cv.IntValue != 0)
+			cv.IntValue = 0;
+	}
+	// Bots keep the difficulty they joined with: re-add them as Expert.
+	if (reAddBots && GetBotCount() > 0)
+	{
+		ServerCommand("bot_kick");
+		LogMessage("Deathmatch: bots re-added on Expert difficulty (bot_quota refills them).");
+	}
 	if (g_cvDmLoadout.BoolValue)
 	{
 		for (int i = 0; i < sizeof(g_DmLoadoutCvars); i++)
@@ -2982,6 +3011,17 @@ void DmRestore()
 	}
 	delete snap;
 	g_DmSaved.Clear();
+}
+
+int GetBotCount()
+{
+	int n = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && IsFakeClient(i) && !IsClientSourceTV(i))
+			n++;
+	}
+	return n;
 }
 
 public Action Timer_DmBuyMenu(Handle timer)
