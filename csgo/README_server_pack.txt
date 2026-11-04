@@ -398,7 +398,8 @@ Game modes (admins)
   rules (instant respawn with 2 s spawn protection, armour + helmet, one
   endless round - change map with !rtv) instead of the game's own
   Deathmatch mode, which left bots standing still. The scoreboard shows
-  kills and deaths rather than Deathmatch points. Everyone spawns with a knife, AK-47 and
+  kills and deaths rather than Deathmatch points. Every kill gives the
+  killer +50 HP (up to 100; match_dm_kill_hp, 0 = off). Everyone spawns with a knife, AK-47 and
   Desert Eagle (with their own skins) and the buy menu is off for
   players. Bots get exactly the same: any other gun (bought, picked up
   or given) is taken away straight away and replaced with the AK /
@@ -593,6 +594,7 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
   match_dm_loadout                    (1 = knife + AK-47 + Deagle in
                                        Deathmatch, no buy menu)
   match_skip_team_menu                (1 = auto-join a team, no team menu)
+  match_dm_kill_hp                    (HP per kill in Deathmatch, 50)
   match_rtv_enabled                   (1 = !rtv and !rtg allowed)
   match_rtv_ratio                     (share of players needed, 0.6)
 

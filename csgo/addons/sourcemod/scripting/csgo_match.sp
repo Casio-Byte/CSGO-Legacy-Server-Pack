@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.25.0-20261104"
+#define PLUGIN_VERSION "1.26.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -239,6 +239,7 @@ bool  g_RtvChanging = false;
 float g_RtvAllowedAt = 0.0;   // engine time
 char  g_RtvTarget[PLATFORM_MAX_PATH];
 ConVar g_cvDmLoadout;
+ConVar g_cvDmKillHp;
 StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
 bool g_DmNoBuy = false;
 bool g_PrematchOn = false;
@@ -520,6 +521,7 @@ public void OnPluginStart()
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	g_cvSkipTeamMenu  = CreateConVar("match_skip_team_menu", "1", "1 = no team-select screen when a player joins or a map loads; they're put on a team automatically (M still opens it)", _, true, 0.0, true, 1.0);
 	g_cvDmLoadout     = CreateConVar("match_dm_loadout", "1", "Deathmatch: 1 = everyone spawns with knife, AK-47 and Desert Eagle, and the buy menu is off (Deathmatch is always free-for-all)", _, true, 0.0, true, 1.0);
+	g_cvDmKillHp      = CreateConVar("match_dm_kill_hp", "50", "Deathmatch: HP the killer gets back for each kill (max 100 HP; 0 = off)", _, true, 0.0, true, 100.0);
 	g_cvRtvEnabled    = CreateConVar("match_rtv_enabled", "1", "1 = players can rock the vote (!rtv, new map) and rock the gamemode (!rtg, new mode + map). Never during a live 5v5 / wingman match.", _, true, 0.0, true, 1.0);
 	g_cvRtvRatio      = CreateConVar("match_rtv_ratio", "0.6", "Share of players that must type !rtv (or !rtg) to start the vote", _, true, 0.05, true, 1.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
@@ -542,6 +544,7 @@ public void OnPluginStart()
 	HookEvent("cs_win_panel_match", Event_MatchEnd);
 	HookEvent("announce_phase_end", Event_PhaseEnd);
 	HookEvent("player_death", Event_DuelDeath);
+	HookEvent("player_death", Event_DmKillHeal);
 	HookEvent("player_team", Event_DuelTeam);
 	HookEvent("player_team", Event_SeriesTeam);
 	g_SeriesRoster = new StringMap();
@@ -2461,6 +2464,25 @@ void ArmDuelist(int client)
 	}
 }
 
+
+// Deathmatch: health back for every kill.
+public void Event_DmKillHeal(Event event, const char[] name, bool dontBroadcast)
+{
+	int bonus = g_cvDmKillHp.IntValue;
+	if (bonus <= 0 || !DmActive())
+		return;
+	int attacker = GetClientOfUserId(event.GetInt("attacker"));
+	int victim = GetClientOfUserId(event.GetInt("userid"));
+	if (attacker <= 0 || attacker == victim || !IsClientInGame(attacker) || !IsPlayerAlive(attacker))
+		return;
+	int hp = GetClientHealth(attacker);
+	if (hp >= 100)
+		return;
+	int newHp = hp + bonus > 100 ? 100 : hp + bonus;
+	SetEntityHealth(attacker, newHp);
+	if (!IsFakeClient(attacker))
+		PrintHintText(attacker, "+%d HP", newHp - hp);
+}
 
 public void Event_DuelDeath(Event event, const char[] name, bool dontBroadcast)
 {

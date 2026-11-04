@@ -147,7 +147,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Competitive 5v5 | ready-up match flow, optional **best of 3** |
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Arms Race / Demolition | the game's own rules |
-| Deathmatch | **free-for-all**, built on Casual (instant respawn, 2 s spawn protection, one endless round; the game's own DM mode left bots standing still), no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); bots on Expert |
+| Deathmatch | **free-for-all**, built on Casual (instant respawn, 2 s spawn protection, one endless round; the game's own DM mode left bots standing still), no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); **+50 HP per kill** (`match_dm_kill_hp`); bots on Expert |
 | Practice | grenade trajectories, impacts, infinite ammo, `!spawn` `!clear` `!god`. All of it (and `sv_cheats`) is reset when any other mode starts. |
 | 1v1 duels | a lobby on Workshop aim maps: one endless respawn round (no warmup) where everyone can `!duel` each other. Duels are real rounds: a kill ends the round and both restart at the map's T / CT spawns (no spawn traps). No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
