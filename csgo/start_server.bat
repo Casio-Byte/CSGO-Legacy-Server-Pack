@@ -49,6 +49,8 @@ title CS:GO server launcher
 
 :start
 call "%SETTINGS%"
+rem Deathmatch now runs on Casual with the match plugin's rules (older setups used the game's own DM).
+if /i "%SETUP_GAMEMODE%"=="deathmatch" set "MODE_ARGS=+game_type 0 +game_mode 0 -match_mode deathmatch"
 if not defined MODE_ARGS (
     echo.
     echo New setting: default game mode and first map. Press Enter to keep your other answers.
@@ -194,7 +196,7 @@ $modes = @(
     @('Competitive 5v5',  'competitive', 0, 1, '',         'de_dust2'),
     @('Wingman 2v2',      'wingman',     0, 2, '',         'de_shortdust'),
     @('Casual',           'casual',      0, 0, '',         'de_dust2'),
-    @('Deathmatch (free-for-all, AK + Deagle)', 'deathmatch', 1, 2, '', 'de_dust2'),
+    @('Deathmatch (free-for-all, AK + Deagle)', 'deathmatch', 0, 0, 'deathmatch', 'de_dust2'),
     @('Arms Race',        'armsrace',    1, 0, '',         'ar_baggage'),
     @('Demolition',       'demolition',  1, 1, '',         'de_lake'),
     @('Practice',         'practice',    0, 1, 'practice', 'de_mirage'),

@@ -371,7 +371,11 @@ Game modes (admins)
   In Casual, Deathmatch, Arms Race and Demolition the game runs its own
   rules; the ready-up commands only apply in Competitive and Wingman.
   Deathmatch is free-for-all (everyone against everyone, random spawns),
-  with no bonus weapon rounds. Everyone spawns with a knife, AK-47 and
+  with no bonus weapon rounds. It runs on Casual with the plugin's own
+  rules (instant respawn with 2 s spawn protection, armour + helmet, one
+  endless round - change map with !rtv) instead of the game's own
+  Deathmatch mode, which left bots standing still. The scoreboard shows
+  kills and deaths rather than Deathmatch points. Everyone spawns with a knife, AK-47 and
   Desert Eagle (with their own skins) and the buy menu is off for
   players. Bots get exactly the same: any other gun (bought, picked up
   or given) is taken away straight away and replaced with the AK /
@@ -565,6 +569,7 @@ Pick "Retakes" in !gamemode (or as the default mode in start_server.bat
 setup). Every round the terrorists have already planted on a random site
 and the CTs have to retake it. Teams are balanced automatically; players
 waiting for a slot join next round. Up to 9 players (sm_retakes_maxplayers).
+No warmup: rounds start as soon as two players are in.
 
   !guns                 loadout menu (the standard retakes allocator):
                         CT rifle (M4A4 / M4A1-S / AUG), T rifle (AK-47 /

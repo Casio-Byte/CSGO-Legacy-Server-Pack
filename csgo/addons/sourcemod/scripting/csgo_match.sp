@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.19.0-20261104"
+#define PLUGIN_VERSION "1.20.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -155,6 +155,7 @@ bool g_PracticeNext = false;   // set by !gamemode / !prac so practice survives 
 bool  g_OneVOneNext = false;     // 1v1 duel lobby (survives map changes)
 bool  g_ArenaNext = false;       // Multi-1v1 arenas (survives map changes)
 bool  g_RetakesNext = false;     // Retakes (survives map changes; the retakes plugin runs the rounds)
+bool  g_DmNext = false;          // Deathmatch, built on Casual (survives map changes)
 
 /* !map */
 #define MAPCAT_ALL      -3
@@ -612,6 +613,8 @@ void ApplyBootMode()
 		g_ArenaNext = true;
 	else if (StrEqual(mode, "retakes", false))
 		g_RetakesNext = true;
+	else if (StrEqual(mode, "deathmatch", false))
+		g_DmNext = true;
 	else
 		return;
 	LogMessage("Starting in %s mode (from the launch options).", mode);
@@ -2890,8 +2893,10 @@ enum
 };
 
 char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "1v1 duels", "Multi-1v1 arenas", "Retakes" };
-int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0 };
-int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 1, 0, 1 };
+// Deathmatch runs on Casual (0/0) with the plugin's own respawn rules - the
+// game's real Deathmatch mode (1/2) left bots standing still and lost knives.
+int  g_GmType[GM_COUNT]   = { 0, 0, 0, 0, 1, 1, 0, 0, 0, 0 };
+int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 0, 0, 1, 1, 1, 0, 1 };
 // Each mode has its own map folder: csgo/maps/modes/<folder>/
 // Standard maps written to maps/modes/<folder>/maplist.txt if that file is missing.
 char g_GmDefaultMaps[GM_COUNT][] =
@@ -2939,12 +2944,18 @@ int CurrentMode()
 		return GM_Arena;
 	if (g_RetakesNext)
 		return GM_Retakes;
+	if (g_DmNext)
+		return GM_Deathmatch;
 	if (g_OneVOneNext)
 		return GM_1v1Match;
 	int type = GetCvarInt("game_type");
 	int mode = GetCvarInt("game_mode");
+	if (type == 1 && mode == 2)
+		return GM_Deathmatch; // the game's own Deathmatch (old launch settings / console)
 	for (int i = 0; i < GM_Practice; i++)
 	{
+		if (i == GM_Deathmatch)
+			continue; // only through g_DmNext (it shares Casual's game_type/game_mode)
 		if (g_GmType[i] == type && g_GmMode[i] == mode)
 			return i;
 	}
@@ -2968,7 +2979,7 @@ bool IsWingman()
 // Modes where the ready-up / knife / live match flow runs.
 bool IsMatchMode()
 {
-	if (g_ArenaNext || g_OneVOneNext || g_RetakesNext)
+	if (g_ArenaNext || g_OneVOneNext || g_RetakesNext || g_DmNext)
 		return false;
 	if (GetCvarInt("game_type") != 0)
 		return false;
@@ -2992,7 +3003,26 @@ char g_DmFfaCvars[][][] =
 {
 	{ "mp_teammates_are_enemies", "1" },
 	{ "mp_dm_teammode", "0" },
-	{ "mp_randomspawn", "1" },
+	{ "mp_randomspawn", "1" },        // the maps' deathmatch spawn points
+	{ "mp_randomspawn_los", "1" },    // not in sight of an enemy
+	// Casual turned into deathmatch: instant respawn, one endless round
+	{ "mp_respawn_on_death_t", "1" },
+	{ "mp_respawn_on_death_ct", "1" },
+	{ "mp_respawn_immunitytime", "2" },
+	{ "mp_ignore_round_win_conditions", "1" },
+	{ "mp_roundtime", "60" },
+	{ "mp_roundtime_defuse", "60" },
+	{ "mp_roundtime_hostage", "60" },
+	{ "mp_freezetime", "0" },
+	{ "mp_do_warmup_period", "0" },
+	{ "mp_warmuptime", "0" },
+	{ "mp_give_player_c4", "0" },
+	{ "mp_free_armor", "2" },         // kevlar + helmet
+	{ "mp_solid_teammates", "1" },    // free-for-all: nobody walks through anybody
+	{ "mp_halftime", "0" },
+	{ "mp_weapons_allow_map_placed", "0" },
+	{ "mp_death_drop_grenade", "0" },
+	{ "mp_death_drop_defuser", "0" },
 	// no bonus weapon rounds
 	{ "mp_dm_bonus_length_min", "0" },
 	{ "mp_dm_bonus_length_max", "0" },
@@ -3212,6 +3242,11 @@ void ApplyModeOnMapStart()
 	if (g_RetakesNext)
 	{
 		EnterRetakes();
+		return;
+	}
+	if (g_DmNext)
+	{
+		EnterDeathmatch();
 		return;
 	}
 	if (IsMatchMode())
@@ -3714,6 +3749,10 @@ public Action Timer_RtvChange(Handle timer)
 
 void SetRetakesPlugin(bool on)
 {
+	// No warmup in Retakes (an older retakes.cfg may still say 25).
+	ConVar wt = FindConVar("sm_retakes_warmuptime");
+	if (on && wt != null && wt.IntValue != 0)
+		wt.IntValue = 0;
 	ConVar cv = FindConVar("sm_retakes_enabled");
 	if (cv != null && cv.BoolValue != on)
 		cv.BoolValue = on;
@@ -3725,6 +3764,20 @@ bool RetakesHasSpawns(const char[] map)
 	MapShortName(map, name, sizeof(name));
 	BuildPath(Path_SM, path, sizeof(path), "configs/retakes/%s.cfg", name);
 	return FileExists(path);
+}
+
+void EnterDeathmatch()
+{
+	DuelCleanup();
+	ResetMatch();
+	StopDemo();
+	g_State = State_None;
+	NoGameEnd();
+	DmApply();
+	ServerCommand("mp_warmup_end");
+	ServerCommand("mp_restartgame 1"); // start the endless respawn round with these rules
+	CreateTimer(3.0, Timer_DmBuyMenu, _, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(5.0, Timer_ModeAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 void EnterRetakes()
@@ -3740,6 +3793,8 @@ void EnterRetakes()
 		CreateTimer(5.0, Timer_RetakesMissing, _, TIMER_FLAG_NO_MAPCHANGE);
 		return;
 	}
+	ServerCommand("mp_do_warmup_period 0");
+	ServerCommand("mp_warmup_end");
 	char map[PLATFORM_MAX_PATH];
 	GetCurrentMap(map, sizeof(map));
 	if (!RetakesHasSpawns(map))
@@ -4036,6 +4091,7 @@ public Action Timer_SwitchMode(Handle timer)
 	g_OneVOneNext = (gm == GM_1v1Match);
 	g_ArenaNext = (gm == GM_Arena);
 	g_RetakesNext = (gm == GM_Retakes);
+	g_DmNext = (gm == GM_Deathmatch);
 	// Before the map change, so the retakes plugin starts (or stays out of) the new map itself.
 	SetRetakesPlugin(g_RetakesNext);
 	if (g_cvDuelActive != null)
@@ -6732,7 +6788,7 @@ void SeriesOnMapStart()
 	char current[PLATFORM_MAX_PATH];
 	GetCurrentMap(current, sizeof(current));
 	if (!SameMap(current, g_SeriesMaps[g_SeriesMapIndex]) || g_PracticeNext
-		|| g_ArenaNext || g_OneVOneNext || g_RetakesNext)
+		|| g_ArenaNext || g_OneVOneNext || g_RetakesNext || g_DmNext)
 	{
 		LogMessage("Best-of-3 series cancelled: %s was loaded instead of %s.", current, g_SeriesMaps[g_SeriesMapIndex]);
 		CancelSeries("");

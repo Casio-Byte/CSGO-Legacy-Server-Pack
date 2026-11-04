@@ -153,7 +153,7 @@ public void OnPluginStart() {
     g_hRoundsToScramble = CreateConVar("sm_retakes_scramble_rounds", "10", "Consecutive terrorist wins to cause a team scramble.");
     g_hRoundTime = CreateConVar("sm_retakes_round_time", "12", "Round time left in seconds.");
     g_hUseRandomTeams = CreateConVar("sm_retakes_random_teams", "0", "If set to 1, this will randomize the teams every round.");
-    g_WarmupTimeCvar = CreateConVar("sm_retakes_warmuptime", "25", "Warmup time on map starts");
+    g_WarmupTimeCvar = CreateConVar("sm_retakes_warmuptime", "0", "Warmup time on map starts (0 = no warmup)");
     g_MessagePrefix = CreateConVar("sm_retake_message_prefix", "[{GREEN}Retakes{NORMAL}]", "Message prefix used on chat messages.");
 
     g_EnabledCvar.AddChangeHook(EnabledChanged);
@@ -256,8 +256,8 @@ public void OnMapStart() {
 
     ExecConfigs();
 
-    // Restart warmup for players to connect.
-    StartTimedWarmup(g_WarmupTimeCvar.IntValue);
+    // Restart warmup for players to connect (none by default in the CS:GO server pack).
+    RetakesWarmup();
 }
 
 public void OnMapEnd() {
@@ -281,7 +281,7 @@ public void EnabledChanged(Handle cvar, const char[] oldValue, const char[] newV
     } else if (!wasEnabled && g_Enabled) {
         Queue_Clear(g_hWaitingQueue);
         ExecConfigs();
-        StartTimedWarmup(g_WarmupTimeCvar.IntValue); // CS:GO server pack: switched on mid-map
+        RetakesWarmup(); // CS:GO server pack: switched on mid-map
         for (int i = 1; i <= MaxClients; i++)  {
             if (IsClientConnected(i) && !IsFakeClient(i)) {
                 OnClientConnected(i);
@@ -293,6 +293,18 @@ public void EnabledChanged(Handle cvar, const char[] oldValue, const char[] newV
             }
         }
     }
+}
+
+// CS:GO server pack: sm_retakes_warmuptime 0 = straight into rounds (a join with
+// fewer than 2 players ends the round, so the next round places everyone).
+void RetakesWarmup() {
+    if (g_WarmupTimeCvar.IntValue > 0) {
+        StartTimedWarmup(g_WarmupTimeCvar.IntValue);
+        return;
+    }
+    ServerCommand("mp_do_warmup_period 0");
+    ServerCommand("mp_warmuptime 0");
+    ServerCommand("mp_warmup_end");
 }
 
 public void ExecConfigs() {

@@ -145,11 +145,11 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Competitive 5v5 | ready-up match flow, optional **best of 3** |
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Arms Race / Demolition | the game's own rules |
-| Deathmatch | **free-for-all**, no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); bots on Expert |
+| Deathmatch | **free-for-all**, built on Casual (instant respawn, 2 s spawn protection, one endless round; the game's own DM mode left bots standing still), no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); bots on Expert |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
 | 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
-| Retakes | bomb planted on a random site every round, CTs retake it. Standard retakes allocator: `!guns` picks the CT rifle (M4A4 / M4A1-S / AUG), the T rifle (AK-47 / SG 553) and whether you want the AWP (one per team). Every round is a full buy with armour, a random grenade and kits; `!loadout` pistol picks and skins still apply. Spawns included for 24 maps; admins add more with `!edit`. |
+| Retakes | bomb planted on a random site every round, CTs retake it. Standard retakes allocator: `!guns` picks the CT rifle (M4A4 / M4A1-S / AUG), the T rifle (AK-47 / SG 553) and whether you want the AWP (one per team). Every round is a full buy with armour, a random grenade and kits; `!loadout` pistol picks and skins still apply. Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
 
 In every mode there's no team-select screen after a map loads: players are put on the smaller team automatically, and **M** still opens the menu to switch (`match_skip_team_menu 0` to turn this off).
 
