@@ -119,7 +119,7 @@ Close the server before running it. It lists everything and asks first. By defau
 
 ## Community maps: `download_community_maps.bat`
 
-This downloads the arena maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in the mode's folder and skips maps you already have.
+This downloads the arena maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, puts them in `csgo/maps` (the same place as the official maps, so every map loads the same way) and skips maps you already have. The server only changes to a map whose `.bsp` really exists. A missing map is reported in chat instead of CS:GO quietly loading the closest official map.
 
 ---
 

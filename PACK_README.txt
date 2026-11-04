@@ -227,17 +227,21 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
                am_crashz_dust am_inferno_banana_dolnma       (Workshop)
 
 The official maps are already installed with the server. The community
-maps (arenas) don't come with CS:GO and aren't included in
-this pack. To get them:
+maps (1v1 aim maps and arenas) don't come with CS:GO and aren't included
+in this pack. To get them:
 
   download_community_maps.bat
     Put it in your csgo folder (it comes with this pack, next to "maps")
-    and double-click it. For every map in the arena
-    downloads.txt files it finds the CS:GO version on varq.net or the Steam
-    Workshop, downloads it,
-    unpacks it and puts the .bsp (and .nav, materials etc.) in the right
-    place. Maps you already have are skipped, so it's safe to run again.
-    Anything it can't get is listed at the end with a link.
+    and double-click it (start_server.bat also runs it on every start).
+    For every map in the 1v1 and arena downloads.txt files it finds the
+    CS:GO version on the Steam Workshop (or varq.net), downloads it,
+    unpacks it and puts the .bsp (and .nav) in csgo\maps - the same place
+    as the official maps, so they load the same way. Maps you already have
+    are skipped, so it's safe to run again. Anything it can't get is
+    listed at the end with the reason.
+    The server only ever changes to a map whose .bsp is really there: if
+    one is missing, picking it says so in chat and the server stays on the
+    current map (CS:GO would otherwise load the closest official map).
     The standard community maps above were picked because varq.net hosts
     a download for them. To add more, put a line in the mode's
     downloads.txt: the map name, then (if different) the last part of its
@@ -468,9 +472,9 @@ Match - practice mode
   knife round, pauses or match commands. While a duel runs, the other
   players spectate; afterwards everyone is back in the lobby.
   For lots of 1v1s at the same time, use Multi-1v1 arenas instead.
-  Maps: only 1v1 aim maps - the Workshop maps in maps\modes\1v1 (fetched
-  by download_community_maps.bat) and any aim_ / awp_ / 1v1_ maps on the
-  server. No normal de_ maps.
+  Maps: only 1v1 aim maps - the Workshop maps listed in maps\modes\1v1
+  (fetched into csgo\maps by download_community_maps.bat) and any aim_ /
+  awp_ / 1v1_ maps on the server. No normal de_ maps.
 
 Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
   One map, many 1v1s at once: every arena on the map runs its own 1v1 each

@@ -6,8 +6,9 @@ rem ------------------------------------------------------------------
 rem  Downloads the 1v1 and Multi-1v1 arena maps listed in
 rem      maps\modes\1v1\downloads.txt
 rem      maps\modes\arena\downloads.txt
-rem  from varq.net or the Steam Workshop and puts each .bsp into its
-rem  mode folder. Edit those downloads.txt files to change what it gets.
+rem  from varq.net or the Steam Workshop and puts each .bsp into csgo\maps
+rem  (where the game loads standard maps from); the mode folder lists say
+rem  which mode a map is for. Edit those downloads.txt files to change it.
 rem
 rem  Put this file in your server's "csgo" folder and double-click it.
 rem  Maps you already have are skipped, so it's safe to run again.
@@ -288,10 +289,26 @@ foreach ($mode in $modes) {
         }
 
         # Keep the map's real file name - the map won't load if it's renamed.
+        # Saved in csgo\maps like the standard maps: the game loads maps
+        # reliably only from there (a map it can't find turns into a stock map).
         $real = $bsp.BaseName
-        Copy-Item $bsp.FullName (Join-Path $folder "$real.bsp") -Force
+        $mapsRoot = Join-Path $csgo 'maps'
+        if (Test-Path (Join-Path $mapsRoot "$real.bsp")) {
+            Write-Host "already in csgo\maps as $real" -ForegroundColor DarkGray
+            continue
+        }
+        Copy-Item $bsp.FullName (Join-Path $mapsRoot "$real.bsp") -Force
+        $saved = @("$real.bsp")
         $nav = Get-ChildItem $out -Recurse -Filter "$real.nav" | Select-Object -First 1
-        if ($nav) { Copy-Item $nav.FullName (Join-Path $folder "$real.nav") -Force }
+        if ($nav -and -not (Test-Path (Join-Path $mapsRoot "$real.nav"))) {
+            Copy-Item $nav.FullName (Join-Path $mapsRoot "$real.nav") -Force
+            $saved += "$real.nav"
+        }
+        # Listed so uninstall_server_pack.bat can remove them again.
+        $log = Join-Path $csgo 'maps\modes\copied_to_maps.txt'
+        $have = @(); if (Test-Path $log) { $have = @(Get-Content $log) }
+        $new = @($saved | Where-Object { $have -notcontains $_ })
+        if ($new.Count) { Add-Content -Path $log -Value $new }
 
         # If the real name differs, update the lists so the menu and re-runs match.
         if ($real -ne $map) {
@@ -332,7 +349,9 @@ if ($failed.Count -gt 0) {
     Write-Host "Couldn't get $($failed.Count) map(s):" -ForegroundColor Yellow
     $failed | ForEach-Object { Write-Host "  - $_" }
     Write-Host ''
-    Write-Host 'Download those by hand and put the .bsp in the mode''s folder (maps\modes\<mode>\).'
+    Write-Host 'Download those by hand and put the .bsp in csgo\maps (or the mode''s folder,'
+    Write-Host 'maps\modes\<mode>\ - start_server.bat copies those into csgo\maps).'
+    Write-Host 'Until a map is there, the server can''t load it.' -ForegroundColor Yellow
 }
 Write-Host ''
 Write-Host 'No restart needed - the maps show up the next time you open !gamemode.'

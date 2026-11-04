@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.23.0-20261104"
+#define PLUGIN_VERSION "1.24.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -3844,7 +3844,8 @@ public Action Timer_RtvChange(Handle timer)
 		return Plugin_Stop;
 	}
 	// Same mode, new map: the mode flags and game_type/game_mode stay as they are.
-	ChangeLevelTo(target);
+	if (!ChangeLevelTo(target))
+		g_RtvChanging = false;
 	return Plugin_Stop;
 }
 
@@ -4187,6 +4188,11 @@ public Action Timer_SwitchMode(Handle timer)
 		return Plugin_Stop;
 	}
 	strcopy(g_SwitchMap, sizeof(g_SwitchMap), target);
+	if (!MapFileExists(g_SwitchMap))
+	{
+		ReportMissingMap(g_SwitchMap);
+		return Plugin_Stop; // nothing changed: same mode, same map
+	}
 
 	g_PracticeNext = (gm == GM_Practice);
 	if (g_ArenaNext && gm != GM_Arena)
@@ -4696,11 +4702,46 @@ void PlayableMapPath(const char[] map, char[] out, int maxlen)
 	strcopy(out, maxlen, name);
 }
 
-void ChangeLevelTo(const char[] map)
+/* The game turns a map name it can't find into the closest stock map
+   (pick aim_redline, get de_dust2). So a map change only ever goes to a map
+   whose exact .bsp exists: csgo/maps/<name>.bsp (like the standard maps),
+   csgo/maps/workshop/<id>/<name>.bsp, or a mode folder (copied to maps/). */
+bool MapFileExists(const char[] map)
+{
+	char file[PLATFORM_MAX_PATH];
+	Format(file, sizeof(file), "maps/%s.bsp", map);
+	if (FileExists(file, true))
+		return true;
+	if (strncmp(map, "modes/", 6, false) == 0)
+	{
+		char name[PLATFORM_MAX_PATH];
+		MapShortName(map, name, sizeof(name));
+		Format(file, sizeof(file), "maps/%s.bsp", name);
+		return FileExists(file, true);
+	}
+	return false;
+}
+
+void ReportMissingMap(const char[] map)
+{
+	char name[PLATFORM_MAX_PATH];
+	MapShortName(map, name, sizeof(name));
+	Announce("\x02Can't load %s:\x01 there's no \x04csgo\\maps\\%s.bsp\x01 on the server. Staying on this map.", name, name);
+	Announce("Run \x04download_community_maps.bat\x01 (or put the .bsp in csgo\\maps) - see the server console for why a download failed.");
+	LogError("Map change to %s refused: maps/%s.bsp not found (the game would have loaded a different map).", map, name);
+}
+
+bool ChangeLevelTo(const char[] map)
 {
 	char path[PLATFORM_MAX_PATH];
 	PlayableMapPath(map, path, sizeof(path));
+	if (!MapFileExists(path))
+	{
+		ReportMissingMap(path);
+		return false;
+	}
 	ServerCommand("changelevel %s", path);
+	return true;
 }
 
 // Is <map> (any path) a .bsp in this mode's own folder, maps/modes/<folder>/?
@@ -4731,7 +4772,9 @@ bool ResolveMap(const char[] map, char[] out, int maxlen)
 	}
 	char found[PLATFORM_MAX_PATH];
 	FindMapResult r = FindMap(map, found, sizeof(found));
-	if (r == FindMap_Found)
+	// "Found" only counts if the exact .bsp is really there - otherwise the
+	// game would load the closest stock map instead.
+	if (r == FindMap_Found && MapFileExists(map))
 	{
 		strcopy(out, maxlen, map);
 		return true;
