@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.26.0-20261104"
+#define PLUGIN_VERSION "1.27.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -3247,7 +3247,10 @@ public void Hook_DmNoBuyZone(int client)
 void ApplyModeOnMapStart()
 {
 	SeriesOnMapStart();
-	SetRetakesPlugin(g_RetakesNext);
+	// Leaving Retakes: off straight away. Coming into it: EnterRetakes switches
+	// it on once this map's configs (and the last mode's clean-up) have run.
+	if (!g_RetakesNext)
+		SetRetakesPlugin(false);
 	RtvOnMapStart();
 	if (!DmActive() || g_PrematchOn)
 		DmRestore(); // also ends the no-warmup round from the last map
@@ -3829,11 +3832,36 @@ void EnterRetakes()
 	}
 	ServerCommand("mp_do_warmup_period 0");
 	ServerCommand("mp_warmup_end");
+	ConVar on = FindConVar("sm_retakes_enabled");
+	if (on.BoolValue)
+	{
+		// Already on (Retakes -> Retakes map change): its config ran at map
+		// start - run it again after anything this map start queued (e.g. a
+		// game mode cfg re-run by a clean-up), so retakes' rules win.
+		ServerCommand("exec sourcemod/retakes/retakes_game.cfg");
+	}
+	else
+	{
+		// Coming from another mode: switch it on once the queued configs and
+		// clean-ups above have run, so retakes saves clean settings (to put
+		// back later) and its own rules are applied last.
+		CreateTimer(0.5, Timer_EnableRetakes, _, TIMER_FLAG_NO_MAPCHANGE);
+	}
 	char map[PLATFORM_MAX_PATH];
 	GetCurrentMap(map, sizeof(map));
 	if (!RetakesHasSpawns(map))
 		LogMessage("Retakes: %s has no spawns in configs/retakes - an admin can add them with !edit.", map);
 	CreateTimer(8.0, Timer_RetakesAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_EnableRetakes(Handle timer)
+{
+	if (!g_RetakesNext)
+		return Plugin_Stop;
+	SetRetakesPlugin(true);
+	// Start the first round fresh, with retakes' rules and teams.
+	ServerCommand("mp_restartgame 1");
+	return Plugin_Stop;
 }
 
 public Action Timer_RetakesMissing(Handle timer)
@@ -4131,8 +4159,12 @@ public Action Timer_SwitchMode(Handle timer)
 	g_ArenaNext = (gm == GM_Arena);
 	g_RetakesNext = (gm == GM_Retakes);
 	g_DmNext = (gm == GM_Deathmatch);
-	// Before the map change, so the retakes plugin starts (or stays out of) the new map itself.
-	SetRetakesPlugin(g_RetakesNext);
+	// Leaving Retakes: switch it off before the map change, so it puts the
+	// settings it changed back. Coming into it: EnterRetakes switches it on
+	// after the new map has loaded - not here, where it would save and apply
+	// its settings on the old map, in the old mode.
+	if (!g_RetakesNext)
+		SetRetakesPlugin(false);
 	if (g_cvDuelActive != null)
 		g_cvDuelActive.BoolValue = false;
 	ServerCommand("game_type %d", g_GmType[gm]);
