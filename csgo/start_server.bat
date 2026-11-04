@@ -49,6 +49,11 @@ title CS:GO server launcher
 
 :start
 call "%SETTINGS%"
+if not defined MODE_ARGS (
+    echo.
+    echo New setting: default game mode and first map. Press Enter to keep your other answers.
+    goto :setup
+)
 
 set "TOKEN_ARG="
 if defined GSLT set "TOKEN_ARG=+sv_setsteamaccount %GSLT%"
@@ -72,18 +77,31 @@ if "%START_FASTDL%"=="1" (
     )
 )
 
+:findmap
+rem The map's real path: its mode folder, csgo\maps, or a Workshop folder.
+set "MAP_PATH="
+if exist "%CSGO_DIR%maps\modes\%SETUP_GAMEMODE%\%SETUP_MAP%.bsp" set "MAP_PATH=modes/%SETUP_GAMEMODE%/%SETUP_MAP%"
+if not defined MAP_PATH if exist "%CSGO_DIR%maps\%SETUP_MAP%.bsp" set "MAP_PATH=%SETUP_MAP%"
+if not defined MAP_PATH if exist "%CSGO_DIR%maps\workshop\" for /d %%D in ("%CSGO_DIR%maps\workshop\*") do if exist "%%~fD\%SETUP_MAP%.bsp" set "MAP_PATH=workshop/%%~nxD/%SETUP_MAP%"
+set "START_ARGS=%MODE_ARGS% +map %MAP_PATH%"
+if defined MAP_PATH goto :server
+echo.
+echo The first map %SETUP_MAP% isn't on the server - starting Competitive on de_dust2 instead.
+echo Put the map in csgo\maps\modes\%SETUP_GAMEMODE%\ or run "start_server.bat setup" to pick another.
+set "START_ARGS=+game_type 0 +game_mode 1 +map de_dust2"
+
 :server
 echo.
 echo [%date% %time%] Starting the CS:GO server...
 pushd "%~dp0.."
-start "CS:GO server" /wait "%SRCDS%" %LAUNCH_OPTIONS% %TOKEN_ARG%
+start "CS:GO server" /wait "%SRCDS%" %LAUNCH_OPTIONS% %START_ARGS% %TOKEN_ARG%
 popd
 echo [%date% %time%] The server closed.
 
 if "%AUTO_RESTART%"=="1" (
     echo Restarting in 10 seconds - close this window to stop for good.
     timeout /t 10 >nul
-    goto :server
+    goto :findmap
 )
 
 rem Server is done: stop FastDL too.
@@ -169,7 +187,85 @@ Write-Host ''
 $maxPlayers = AskNumber 'Max players' ([int](OldOr 'SETUP_MAXPLAYERS' '16')) 2 64
 $tickrate   = AskNumber 'Tickrate (64 or 128)' ([int](OldOr 'SETUP_TICKRATE' '128')) 64 128
 $port       = AskNumber 'Port' ([int](OldOr 'SETUP_PORT' '27015')) 1024 65535
-$map        = Clean (Ask 'Starting map' (OldOr 'SETUP_MAP' 'de_dust2'))
+
+# ---- Default game mode and first map (menus) ----
+# name, folder (csgo\maps\modes\<folder>), game_type, game_mode, -match_mode, default map
+$modes = @(
+    @('Competitive 5v5',  'competitive', 0, 1, '',         'de_dust2'),
+    @('Wingman 2v2',      'wingman',     0, 2, '',         'de_shortdust'),
+    @('Casual',           'casual',      0, 0, '',         'de_dust2'),
+    @('Deathmatch (free-for-all, AK + Deagle)', 'deathmatch', 1, 2, '', 'de_dust2'),
+    @('Arms Race',        'armsrace',    1, 0, '',         'ar_baggage'),
+    @('Demolition',       'demolition',  1, 1, '',         'de_lake'),
+    @('Practice',         'practice',    0, 1, 'practice', 'de_mirage'),
+    @('1v1 duels',        '1v1',         0, 1, '1v1',      'aim_redline'),
+    @('Multi-1v1 arenas', 'arena',       0, 0, 'arena',    'am_must2')
+)
+
+# Which modes a map suits (same rules as the match plugin).
+function MapFits([string]$m, [string]$folder) {
+    $m = $m.ToLower()
+    if ($m -match '^(kz_|bhop_|surf_)') { return $false }
+    if ($m.StartsWith('am_'))  { return $folder -eq 'arena' }
+    if ($m -match '^(aim_|awp_|1v1_|training_aim)') { return $folder -eq '1v1' }
+    if ($m.StartsWith('ar_'))  { return $folder -eq 'armsrace' }
+    return @('competitive', 'wingman', 'casual', 'deathmatch', 'demolition', 'practice') -contains $folder
+}
+
+function MapState([string]$m, [string]$folder) {
+    if (Test-Path (Join-Path $csgo "maps\modes\$folder\$m.bsp")) { return '' }
+    if (Test-Path (Join-Path $csgo "maps\$m.bsp")) { return '' }
+    if (@(Get-ChildItem -Path (Join-Path $csgo 'maps\workshop') -Filter "$m.bsp" -Recurse -ErrorAction SilentlyContinue).Count -gt 0) { return '' }
+    $dl = Join-Path $csgo "maps\modes\$folder\downloads.txt"
+    if ((Test-Path $dl) -and (Select-String -Path $dl -Pattern ('^\s*' + [regex]::Escape($m) + '(\s|$)') -Quiet)) { return ' (downloads on start)' }
+    return ' (not installed)'
+}
+
+$oldModeIdx = 1
+for ($i = 0; $i -lt $modes.Count; $i++) { if ($modes[$i][1] -eq (OldOr 'SETUP_GAMEMODE' 'competitive')) { $oldModeIdx = $i + 1 } }
+
+Write-Host ''
+Write-Host 'Default game mode (the server starts in this one; admins can still change it with !gamemode):'
+for ($i = 0; $i -lt $modes.Count; $i++) { Write-Host ("  {0} = {1}" -f ($i + 1), $modes[$i][0]) }
+$modeIdx = AskNumber "Choose 1-$($modes.Count)" $oldModeIdx 1 $modes.Count
+$gm = $modes[$modeIdx - 1]
+$gmFolder = $gm[1]
+
+# Map menu from the mode's maplist.txt (falls back to the mode's default map).
+$maps = @()
+$listFile = Join-Path $csgo "maps\modes\$gmFolder\maplist.txt"
+if (Test-Path $listFile) {
+    $maps = @(Get-Content $listFile | ForEach-Object { ($_.Trim() -split '\s+')[0] } |
+              Where-Object { $_ -and -not $_.StartsWith('//') } | ForEach-Object { $_ -replace '\.bsp$', '' } |
+              Where-Object { MapFits $_ $gmFolder } | Select-Object -Unique)
+}
+if ($maps.Count -eq 0) { $maps = @($gm[5]) }
+
+$oldMap = OldOr 'SETUP_MAP' ''
+$defMap = 1
+for ($i = 0; $i -lt $maps.Count; $i++) { if ($maps[$i] -eq $oldMap) { $defMap = $i + 1 } }
+if ($defMap -eq 1 -and $oldMap -and -not ($maps -contains $oldMap) -and (MapFits $oldMap $gmFolder) -and ((OldOr 'SETUP_GAMEMODE' '') -eq $gmFolder)) { $defMap = 0 }
+
+Write-Host ''
+Write-Host "First map for $($gm[0]):"
+for ($i = 0; $i -lt $maps.Count; $i++) { Write-Host ("  {0,2} = {1}{2}" -f ($i + 1), $maps[$i], (MapState $maps[$i] $gmFolder)) }
+Write-Host "   0 = type a map name$(if ($defMap -eq 0) { " (currently $oldMap)" })"
+$mapIdx = AskNumber "Choose 0-$($maps.Count)" $defMap 0 $maps.Count
+if ($mapIdx -gt 0) {
+    $map = $maps[$mapIdx - 1]
+} else {
+    while ($true) {
+        $map = (Clean (Ask 'Map name (e.g. de_dust2)' $(if ($defMap -eq 0) { $oldMap } else { '' }))) -replace '\.bsp$', ''
+        $map = ($map -split '[\\/]')[-1]
+        if (-not $map) { continue }
+        if (MapFits $map $gmFolder) { break }
+        Write-Host "  $map doesn't suit $($gm[0]) - pick a map made for it." -ForegroundColor Yellow
+    }
+    $st = MapState $map $gmFolder
+    if ($st -eq ' (not installed)') { Write-Host "  $map isn't on the server yet - put it in csgo\maps\modes\$gmFolder\ (or csgo\maps\) before starting." -ForegroundColor Yellow }
+}
+$modeArgs = "+game_type $($gm[2]) +game_mode $($gm[3])"
+if ($gm[4]) { $modeArgs += " -match_mode $($gm[4])" }
 
 Write-Host ''
 Write-Host 'How will people connect?'
@@ -213,7 +309,9 @@ $fastdl      = AskYesNo 'Run FastDL (fast map downloads for players)' ((OldOr 'S
 $autoRestart = AskYesNo 'Restart the server automatically if it crashes' ((OldOr 'AUTO_RESTART' '1') -eq '1')
 
 # ---- Build the launch options ----
-$launch = "-game csgo -console -usercon -port $port -tickrate $tickrate -maxplayers_override $maxPlayers +game_type 0 +game_mode 1 +mapgroup mg_active +map $map"
+# Game mode and map are added at each start (start_server.bat finds the map's
+# real path after the map downloads have run).
+$launch = "-game csgo -console -usercon -port $port -tickrate $tickrate -maxplayers_override $maxPlayers +mapgroup mg_active"
 if ($mode -eq 1) { $launch += ' -insecure +sv_lan 1' } else { $launch += ' +sv_lan 0' }
 
 # ---- launcher_settings.cmd ----
@@ -229,6 +327,8 @@ Set-Content -Path $settingsFile -Value @(
     "set `"SETUP_TICKRATE=$tickrate`"",
     "set `"SETUP_PORT=$port`"",
     "set `"SETUP_MAP=$map`"",
+    "set `"SETUP_GAMEMODE=$gmFolder`"",
+    "set `"MODE_ARGS=$modeArgs`"",
     "set `"SETUP_NETWORK=$mode`"",
     "set `"SETUP_DOWNLOAD_IP=$dlIp`""
 )
@@ -300,6 +400,7 @@ Write-Host "  Server name:  $hostname"
 Write-Host "  Join with:    $(if ($joinPass) { "password $joinPass; connect <server IP>:$port" } else { "connect <server IP>:$port" })"
 Write-Host "  Admin:        $(if ($adminPass) { "/login $adminPass  (in game chat)" } else { '/login is off' })"
 Write-Host "  Network:      $(if ($mode -eq 1) { 'LAN / virtual LAN' } else { 'Internet' })"
+Write-Host "  Starts in:    $($gm[0]) on $map"
 Write-Host "  Map downloads: http://${dlIp}:27020/"
 Write-Host ''
 Write-Host 'Change these any time with:  start_server.bat setup'

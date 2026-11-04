@@ -63,7 +63,8 @@ Updating an existing server: the pack ships a clean `cfg/server.cfg` and an empt
 The first run (or `start_server.bat setup`) asks for:
 
 - server name, join password, RCON password (left empty, a random one is generated) and admin password (for `/login`)
-- max players, tickrate, port and starting map
+- max players, tickrate and port
+- **default game mode** (a numbered menu of all 9 modes) and the **first map** (a menu of that mode's maps marked installed / downloads on start, or type a name; maps that don't suit the mode are refused)
 - **network**: `1` LAN / virtual LAN (Tailscale, ZeroTier) or `2` Internet (asks for a login token, App ID 730)
 - the address players download maps from. In Internet mode your public IP is filled in automatically.
 - auto-download community maps, run FastDL, auto-restart on crash
@@ -142,7 +143,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Competitive 5v5 | ready-up match flow, optional **best of 3** |
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Arms Race / Demolition | the game's own rules |
-| Deathmatch | the game's rules; everyone spawns with knife, AK-47 and Deagle, no buy menu (`match_dm_loadout`) |
+| Deathmatch | **free-for-all**; everyone spawns with knife, AK-47 and Deagle, no buy menu (`match_dm_loadout`) |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
 | 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |

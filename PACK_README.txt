@@ -43,7 +43,10 @@ INSTALL (drag and drop)
 3. Double-click csgo\start_server.bat. The first time it asks a few
    questions and saves the answers:
        server name, join password, RCON password, admin password,
-       max players, tickrate, port, starting map,
+       max players, tickrate, port,
+       default game mode (menu: 5v5, wingman, casual, deathmatch, arms
+       race, demolition, practice, 1v1 duels or arenas) and the first
+       map (menu of that mode's maps, or type a name),
        LAN / virtual LAN or internet (+ login token for internet),
        the address players download maps from (your public IP for
        internet - it's filled in for you), auto-download maps, FastDL,
@@ -356,11 +359,12 @@ Game modes (admins)
   console, admins get a warning.
 
   The chosen mode stays across map changes. Restarting the server goes back
-  to the mode in your launch line (+game_type 0 +game_mode 1 = Competitive).
+  to the default game mode and first map picked in start_server.bat setup.
   In Casual, Deathmatch, Arms Race and Demolition the game runs its own
   rules; the ready-up commands only apply in Competitive and Wingman.
-  Deathmatch: everyone spawns with a knife, AK-47 and Desert Eagle (with
-  their own skins) and the buy menu is off. Turn off with
+  Deathmatch is free-for-all (everyone against everyone, random spawns).
+  Everyone spawns with a knife, AK-47 and Desert Eagle (with their own
+  skins) and the buy menu is off. Turn the fixed guns off with
   match_dm_loadout 0.
   Every mode: no team-select screen after a map loads - players are put
   on the smaller team automatically (M still opens the menu to switch).

@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.13.0-20261104"
+#define PLUGIN_VERSION "1.14.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -228,8 +228,8 @@ int  g_ArenaDuelWep[MAX_ARENAS];       // gun for this round (random duels pick 
 ConVar g_cvArenaShuffle;
 ConVar g_cvSkipTeamMenu;
 ConVar g_cvDmLoadout;
-float g_DmSavedBuytime = -1.0;
-int g_DmSavedBuyAnywhere = -1;
+StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
+bool g_BootModeDone = false;
 
 // Commands registered as sm_<name> so "!name" works too. ".name" works for everything in Dispatch().
 char g_RegisteredCmds[][] =
@@ -501,7 +501,7 @@ public void OnPluginStart()
 	g_cvArenaShuffle  = CreateConVar("match_arena_shuffle", "1", "Multi-1v1 arenas: 1 = shuffle players into random pairs every round, 0 = ladder (winners move up, losers down)", _, true, 0.0, true, 1.0);
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	g_cvSkipTeamMenu  = CreateConVar("match_skip_team_menu", "1", "1 = no team-select screen when a player joins or a map loads; they're put on a team automatically (M still opens it)", _, true, 0.0, true, 1.0);
-	g_cvDmLoadout     = CreateConVar("match_dm_loadout", "1", "Deathmatch: 1 = everyone spawns with knife, AK-47 and Desert Eagle, and the buy menu is off", _, true, 0.0, true, 1.0);
+	g_cvDmLoadout     = CreateConVar("match_dm_loadout", "1", "Deathmatch: 1 = everyone spawns with knife, AK-47 and Desert Eagle, and the buy menu is off (Deathmatch is always free-for-all)", _, true, 0.0, true, 1.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
 	PrintToServer("[Match] CS:GO Match %s loaded", PLUGIN_VERSION);
@@ -573,7 +573,31 @@ public void OnConfigsExecuted()
 	ServerCommand("mp_endmatch_votenextmap 0");
 	LoadSavedOptions();
 	g_KnifeEnabled = g_cvKnifeDefault.BoolValue;
+	ApplyBootMode();
 	ApplyModeOnMapStart();
+}
+
+/* start_server.bat passes "-match_mode practice|1v1|arena" for the modes that
+   aren't just a game_type/game_mode pair. Used for the first map only. */
+void ApplyBootMode()
+{
+	if (g_BootModeDone)
+		return;
+	g_BootModeDone = true;
+	if (GetEngineTime() > 300.0)
+		return; // plugin reloaded on a running server: keep the current mode
+	char mode[32];
+	if (!GetCommandLineParam("-match_mode", mode, sizeof(mode)))
+		return;
+	if (StrEqual(mode, "practice", false))
+		g_PracticeNext = true;
+	else if (StrEqual(mode, "1v1", false))
+		g_OneVOneNext = true;
+	else if (StrEqual(mode, "arena", false))
+		g_ArenaNext = true;
+	else
+		return;
+	LogMessage("Starting in %s mode (from the launch options).", mode);
 }
 
 public void OnMapEnd()
@@ -1663,7 +1687,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 {
 	if (DmLoadoutOn())
 	{
-		CreateTimer(0.15, Timer_DmLoadout, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.5, Timer_DmLoadout, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
 		return;
 	}
 	if (g_State != State_Knife)
@@ -1672,31 +1696,40 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	CreateTimer(0.1, Timer_StripToKnife, userid, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-/* Deathmatch: everyone gets knife + AK-47 + Desert Eagle on every spawn.
-   The loadout plugin skins them as they're equipped. */
+/* Deathmatch: the game hands out knife + AK-47 + Desert Eagle itself (default
+   weapon cvars, see DmApply), the same way it gives the normal spawn pistol, so
+   the loadout plugin's skins and gloves go on as usual. This only fills a gap
+   (e.g. the first spawn before the cvars were set) - it never touches guns
+   that are already right. */
 public Action Timer_DmLoadout(Handle timer, any userid)
 {
 	int client = GetClientOfUserId(userid);
-	if (client == 0 || !IsClientInGame(client) || !IsPlayerAlive(client)
-		|| !DmLoadoutOn())
+	if (client == 0 || !IsClientInGame(client) || !IsPlayerAlive(client) || !DmLoadoutOn())
 		return Plugin_Stop;
 
-	for (int s = 0; s <= 1; s++) // primary, secondary
+	int prim = GetPlayerWeaponSlot(client, 0);
+	if (prim == -1 || GetEntProp(prim, Prop_Send, "m_iItemDefinitionIndex") != 7) // 7 = AK-47
 	{
-		int w;
-		int guard = 0;
-		while ((w = GetPlayerWeaponSlot(client, s)) != -1 && guard++ < 10)
+		if (prim != -1)
 		{
-			RemovePlayerItem(client, w);
-			AcceptEntityInput(w, "Kill");
+			RemovePlayerItem(client, prim);
+			AcceptEntityInput(prim, "Kill");
 		}
+		GivePlayerItem(client, "weapon_ak47");
+	}
+	int sec = GetPlayerWeaponSlot(client, 1);
+	int secDef = sec != -1 ? GetEntProp(sec, Prop_Send, "m_iItemDefinitionIndex") : 0;
+	if (secDef != 1 && secDef != 64) // Desert Eagle (or the R8 if picked in !loadout)
+	{
+		if (sec != -1)
+		{
+			RemovePlayerItem(client, sec);
+			AcceptEntityInput(sec, "Kill");
+		}
+		GivePlayerItem(client, "weapon_deagle");
 	}
 	if (GetPlayerWeaponSlot(client, 2) == -1)
 		GivePlayerItem(client, "weapon_knife");
-	GivePlayerItem(client, "weapon_deagle");
-	int ak = GivePlayerItem(client, "weapon_ak47");
-	if (ak > 0 && IsValidEntity(ak))
-		EquipPlayerWeapon(client, ak);
 	return Plugin_Stop;
 }
 
@@ -2876,35 +2909,84 @@ bool DmLoadoutOn()
 	return g_State == State_None && g_cvDmLoadout.BoolValue && CurrentMode() == GM_Deathmatch;
 }
 
-// Deathmatch: no buying. The old buy settings come back when the mode changes.
-void DmBuyMenu(bool off)
+bool DmActive()
 {
-	ConVar bt = FindConVar("mp_buytime");
-	ConVar ba = FindConVar("mp_buy_anywhere");
-	if (bt == null || ba == null)
+	return g_State == State_None && CurrentMode() == GM_Deathmatch;
+}
+
+// Deathmatch settings: always free-for-all; with match_dm_loadout, a fixed
+// knife + AK-47 + Deagle and no buying. Old values come back when the mode changes.
+char g_DmFfaCvars[][][] =
+{
+	{ "mp_teammates_are_enemies", "1" },
+	{ "mp_dm_teammode", "0" },
+	{ "mp_randomspawn", "1" }
+};
+char g_DmLoadoutCvars[][][] =
+{
+	{ "mp_buytime", "0" },
+	{ "mp_buy_anywhere", "0" },
+	{ "mp_t_default_primary", "weapon_ak47" },
+	{ "mp_ct_default_primary", "weapon_ak47" },
+	{ "mp_t_default_secondary", "weapon_deagle" },
+	{ "mp_ct_default_secondary", "weapon_deagle" },
+	{ "mp_t_default_melee", "weapon_knife" },
+	{ "mp_ct_default_melee", "weapon_knife" }
+};
+
+void DmSetCvar(const char[] name, const char[] value)
+{
+	ConVar cv = FindConVar(name);
+	if (cv == null)
 		return;
-	if (off)
+	char old[128];
+	if (g_DmSaved == null)
+		g_DmSaved = new StringMap();
+	if (!g_DmSaved.GetString(name, old, sizeof(old)))
 	{
-		if (g_DmSavedBuytime < 0.0)
-		{
-			g_DmSavedBuytime = bt.FloatValue;
-			g_DmSavedBuyAnywhere = ba.IntValue;
-		}
-		bt.FloatValue = 0.0;
-		ba.IntValue = 0;
+		cv.GetString(old, sizeof(old));
+		g_DmSaved.SetString(name, old);
 	}
-	else if (g_DmSavedBuytime >= 0.0)
+	cv.SetString(value);
+}
+
+void DmApply()
+{
+	if (!DmActive())
 	{
-		bt.FloatValue = g_DmSavedBuytime;
-		ba.IntValue = g_DmSavedBuyAnywhere;
-		g_DmSavedBuytime = -1.0;
-		g_DmSavedBuyAnywhere = -1;
+		DmRestore();
+		return;
 	}
+	for (int i = 0; i < sizeof(g_DmFfaCvars); i++)
+		DmSetCvar(g_DmFfaCvars[i][0], g_DmFfaCvars[i][1]);
+	if (g_cvDmLoadout.BoolValue)
+	{
+		for (int i = 0; i < sizeof(g_DmLoadoutCvars); i++)
+			DmSetCvar(g_DmLoadoutCvars[i][0], g_DmLoadoutCvars[i][1]);
+	}
+}
+
+void DmRestore()
+{
+	if (g_DmSaved == null || g_DmSaved.Size == 0)
+		return;
+	StringMapSnapshot snap = g_DmSaved.Snapshot();
+	char name[64], value[128];
+	for (int i = 0; i < snap.Length; i++)
+	{
+		snap.GetKey(i, name, sizeof(name));
+		g_DmSaved.GetString(name, value, sizeof(value));
+		ConVar cv = FindConVar(name);
+		if (cv != null)
+			cv.SetString(value);
+	}
+	delete snap;
+	g_DmSaved.Clear();
 }
 
 public Action Timer_DmBuyMenu(Handle timer)
 {
-	DmBuyMenu(DmLoadoutOn());
+	DmApply();
 	return Plugin_Stop;
 }
 
@@ -2918,8 +3000,8 @@ public Action Listener_DmBuy(int client, const char[] command, int argc)
 void ApplyModeOnMapStart()
 {
 	SeriesOnMapStart();
-	if (!DmLoadoutOn())
-		DmBuyMenu(false);
+	if (!DmActive())
+		DmRestore();
 	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_PracticeNext)
 	{
