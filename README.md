@@ -141,10 +141,13 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 |---|---|
 | Competitive 5v5 | ready-up match flow, optional **best of 3** |
 | Wingman 2v2 | ready-up, `wingman.cfg` |
-| Casual / Deathmatch / Arms Race / Demolition | the game's own rules |
+| Casual / Arms Race / Demolition | the game's own rules |
+| Deathmatch | the game's rules; everyone spawns with knife, AK-47 and Deagle, no buy menu (`match_dm_loadout`) |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
 | 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
+
+In every mode there's no team-select screen after a map loads: players are put on the smaller team automatically, and **M** still opens the menu to switch (`match_skip_team_menu 0` to turn this off).
 
 **Maps only go with the modes they're made for:**
 - `am_` maps: Multi-1v1 arenas

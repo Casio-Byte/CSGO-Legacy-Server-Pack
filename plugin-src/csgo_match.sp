@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.12.0-20261103"
+#define PLUGIN_VERSION "1.13.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -226,6 +226,10 @@ int  g_ADuelCount = 0;
 int  g_ArenaDuel[MAX_ARENAS];          // arena duel playing in this arena this round, -1 = normal
 int  g_ArenaDuelWep[MAX_ARENAS];       // gun for this round (random duels pick one per round)
 ConVar g_cvArenaShuffle;
+ConVar g_cvSkipTeamMenu;
+ConVar g_cvDmLoadout;
+float g_DmSavedBuytime = -1.0;
+int g_DmSavedBuyAnywhere = -1;
 
 // Commands registered as sm_<name> so "!name" works too. ".name" works for everything in Dispatch().
 char g_RegisteredCmds[][] =
@@ -496,6 +500,8 @@ public void OnPluginStart()
 	g_cvSeries        = CreateConVar("match_series_maps", "1", "Competitive 5v5: 1 = single map, 3 = best of 3 with a map veto (teams vote to ban/pick)", _, true, 1.0, true, 3.0);
 	g_cvArenaShuffle  = CreateConVar("match_arena_shuffle", "1", "Multi-1v1 arenas: 1 = shuffle players into random pairs every round, 0 = ladder (winners move up, losers down)", _, true, 0.0, true, 1.0);
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
+	g_cvSkipTeamMenu  = CreateConVar("match_skip_team_menu", "1", "1 = no team-select screen when a player joins or a map loads; they're put on a team automatically (M still opens it)", _, true, 0.0, true, 1.0);
+	g_cvDmLoadout     = CreateConVar("match_dm_loadout", "1", "Deathmatch: 1 = everyone spawns with knife, AK-47 and Desert Eagle, and the buy menu is off", _, true, 0.0, true, 1.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
 	PrintToServer("[Match] CS:GO Match %s loaded", PLUGIN_VERSION);
@@ -523,6 +529,13 @@ public void OnPluginStart()
 	for (int i = 0; i < 3; i++)
 		g_SeriesResult[i] = -1;
 	AddCommandListener(Listener_JoinTeam, "jointeam");
+	UserMsg vgui = GetUserMessageId("VGUIMenu");
+	if (vgui != INVALID_MESSAGE_ID)
+		HookUserMessage(vgui, UserMsg_VGUIMenu, true);
+	AddCommandListener(Listener_DmBuy, "buy");
+	AddCommandListener(Listener_DmBuy, "autobuy");
+	AddCommandListener(Listener_DmBuy, "rebuy");
+	AddCommandListener(Listener_DmBuy, "buyrandom");
 	AddCommandListener(Listener_Map, "sm_map");   // our !map replaces SourceMod's
 	g_CookieRifle  = RegClientCookie("match_arena_rifle", "Multi-1v1: preferred rifle", CookieAccess_Private);
 	g_CookiePistol = RegClientCookie("match_arena_pistol", "Multi-1v1: preferred pistol", CookieAccess_Private);
@@ -575,6 +588,7 @@ public void OnMapEnd()
 }
 
 bool g_JoinHandled[MAXPLAYERS + 1];
+bool g_AutoTeamPending[MAXPLAYERS + 1];
 
 public void OnClientPostAdminCheck(int client)
 {
@@ -599,6 +613,9 @@ void HandleJoin(int client)
 public void OnClientPutInServer(int client)
 {
 	g_JoinHandled[client] = false;
+	g_AutoTeamPending[client] = !IsFakeClient(client) && g_cvSkipTeamMenu.BoolValue;
+	if (g_AutoTeamPending[client])
+		CreateTimer(8.0, Timer_AutoTeamFallback, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 	SDKHook(client, SDKHook_TraceAttack, Hook_DuelTraceAttack);
 	// In LAN mode / -insecure the admin check may never run; don't wait for it.
 	if (!IsFakeClient(client))
@@ -1644,10 +1661,43 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
+	if (DmLoadoutOn())
+	{
+		CreateTimer(0.15, Timer_DmLoadout, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+		return;
+	}
 	if (g_State != State_Knife)
 		return;
 	int userid = event.GetInt("userid");
 	CreateTimer(0.1, Timer_StripToKnife, userid, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+/* Deathmatch: everyone gets knife + AK-47 + Desert Eagle on every spawn.
+   The loadout plugin skins them as they're equipped. */
+public Action Timer_DmLoadout(Handle timer, any userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client == 0 || !IsClientInGame(client) || !IsPlayerAlive(client)
+		|| !DmLoadoutOn())
+		return Plugin_Stop;
+
+	for (int s = 0; s <= 1; s++) // primary, secondary
+	{
+		int w;
+		int guard = 0;
+		while ((w = GetPlayerWeaponSlot(client, s)) != -1 && guard++ < 10)
+		{
+			RemovePlayerItem(client, w);
+			AcceptEntityInput(w, "Kill");
+		}
+	}
+	if (GetPlayerWeaponSlot(client, 2) == -1)
+		GivePlayerItem(client, "weapon_knife");
+	GivePlayerItem(client, "weapon_deagle");
+	int ak = GivePlayerItem(client, "weapon_ak47");
+	if (ak > 0 && IsValidEntity(ak))
+		EquipPlayerWeapon(client, ak);
+	return Plugin_Stop;
 }
 
 public Action Timer_StripToKnife(Handle timer, any userid)
@@ -2602,6 +2652,73 @@ public void Frame_EndDuelAfterLeave(int serial)
 		EndDuel("");
 }
 
+/* ---------- Skip the team-select screen ---------- */
+
+public Action UserMsg_VGUIMenu(UserMsg msg_id, Handle msg, const int[] players, int playersNum, bool reliable, bool init)
+{
+	if (playersNum != 1 || !g_cvSkipTeamMenu.BoolValue)
+		return Plugin_Continue;
+	int client = players[0];
+	if (client <= 0 || client > MaxClients || !g_AutoTeamPending[client])
+		return Plugin_Continue;
+	char name[32];
+	PbReadString(msg, "name", name, sizeof(name));
+	if (!StrEqual(name, "team"))
+		return Plugin_Continue;
+	g_AutoTeamPending[client] = false;
+	RequestFrame(Frame_AutoTeam, GetClientUserId(client));
+	return Plugin_Handled; // the menu never shows; M still opens it later
+}
+
+public Action Timer_AutoTeamFallback(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client > 0 && IsClientInGame(client) && g_AutoTeamPending[client])
+	{
+		g_AutoTeamPending[client] = false;
+		if (GetClientTeam(client) == CS_TEAM_NONE)
+			Frame_AutoTeam(userid);
+	}
+	return Plugin_Stop;
+}
+
+public void Frame_AutoTeam(int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client <= 0 || !IsClientInGame(client) || GetClientTeam(client) != CS_TEAM_NONE)
+		return;
+	int t = GetTeamClientCount(CS_TEAM_T);
+	int ct = GetTeamClientCount(CS_TEAM_CT);
+	int team = t < ct ? CS_TEAM_T : (ct < t ? CS_TEAM_CT : (GetRandomInt(0, 1) ? CS_TEAM_T : CS_TEAM_CT));
+	// Goes through the normal jointeam path, so arenas, duels and a best of 3
+	// still put the player where they belong.
+	FakeClientCommand(client, "jointeam %d 1", team);
+	CreateTimer(1.0, Timer_AutoTeamCheck, userid, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_AutoTeamCheck(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client <= 0 || !IsClientInGame(client) || GetClientTeam(client) != CS_TEAM_NONE)
+		return Plugin_Stop;
+	int other = GetTeamClientCount(CS_TEAM_T) <= GetTeamClientCount(CS_TEAM_CT) ? CS_TEAM_T : CS_TEAM_CT;
+	FakeClientCommand(client, "jointeam %d 1", other);
+	CreateTimer(1.0, Timer_AutoTeamLast, userid, TIMER_FLAG_NO_MAPCHANGE);
+	return Plugin_Stop;
+}
+
+public Action Timer_AutoTeamLast(Handle timer, int userid)
+{
+	int client = GetClientOfUserId(userid);
+	if (client > 0 && IsClientInGame(client) && GetClientTeam(client) == CS_TEAM_NONE)
+	{
+		// Both teams full (or the mode refused): watch instead of a blank screen.
+		ChangeClientTeam(client, CS_TEAM_SPECTATOR);
+		PrintToChat(client, "%sTeams are full — you're spectating. Press \x04M\x01 to pick a team.", PREFIX);
+	}
+	return Plugin_Stop;
+}
+
 public Action Listener_JoinTeam(int client, const char[] command, int argc)
 {
 	if (client <= 0 || !IsClientInGame(client))
@@ -2754,9 +2871,55 @@ bool IsMatchMode()
 	return mode == 1 || mode == 2;
 }
 
+bool DmLoadoutOn()
+{
+	return g_State == State_None && g_cvDmLoadout.BoolValue && CurrentMode() == GM_Deathmatch;
+}
+
+// Deathmatch: no buying. The old buy settings come back when the mode changes.
+void DmBuyMenu(bool off)
+{
+	ConVar bt = FindConVar("mp_buytime");
+	ConVar ba = FindConVar("mp_buy_anywhere");
+	if (bt == null || ba == null)
+		return;
+	if (off)
+	{
+		if (g_DmSavedBuytime < 0.0)
+		{
+			g_DmSavedBuytime = bt.FloatValue;
+			g_DmSavedBuyAnywhere = ba.IntValue;
+		}
+		bt.FloatValue = 0.0;
+		ba.IntValue = 0;
+	}
+	else if (g_DmSavedBuytime >= 0.0)
+	{
+		bt.FloatValue = g_DmSavedBuytime;
+		ba.IntValue = g_DmSavedBuyAnywhere;
+		g_DmSavedBuytime = -1.0;
+		g_DmSavedBuyAnywhere = -1;
+	}
+}
+
+public Action Timer_DmBuyMenu(Handle timer)
+{
+	DmBuyMenu(DmLoadoutOn());
+	return Plugin_Stop;
+}
+
+public Action Listener_DmBuy(int client, const char[] command, int argc)
+{
+	if (client > 0 && DmLoadoutOn())
+		return Plugin_Handled;
+	return Plugin_Continue;
+}
+
 void ApplyModeOnMapStart()
 {
 	SeriesOnMapStart();
+	if (!DmLoadoutOn())
+		DmBuyMenu(false);
 	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_PracticeNext)
 	{
@@ -2788,6 +2951,9 @@ void ApplyModeOnMapStart()
 	ResetMatch();
 	StopDemo();
 	g_State = State_None;
+	// After the game mode's own cfg has run, so it can't turn buying back on.
+	CreateTimer(1.0, Timer_DmBuyMenu, _, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(5.0, Timer_DmBuyMenu, _, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(5.0, Timer_ModeAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 

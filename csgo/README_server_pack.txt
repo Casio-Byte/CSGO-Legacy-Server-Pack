@@ -359,6 +359,12 @@ Game modes (admins)
   to the mode in your launch line (+game_type 0 +game_mode 1 = Competitive).
   In Casual, Deathmatch, Arms Race and Demolition the game runs its own
   rules; the ready-up commands only apply in Competitive and Wingman.
+  Deathmatch: everyone spawns with a knife, AK-47 and Desert Eagle (with
+  their own skins) and the buy menu is off. Turn off with
+  match_dm_loadout 0.
+  Every mode: no team-select screen after a map loads - players are put
+  on the smaller team automatically (M still opens the menu to switch).
+  Turn off with match_skip_team_menu 0.
 
 Match - players
   !ready  (!r)          mark yourself ready in warmup
@@ -529,6 +535,9 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
   match_veto_time                     (seconds per best-of-3 map vote)
   match_arena_shuffle                 (1 = shuffle arena pairs every round,
                                        0 = ladder)
+  match_dm_loadout                    (1 = knife + AK-47 + Deagle in
+                                       Deathmatch, no buy menu)
+  match_skip_team_menu                (1 = auto-join a team, no team menu)
 
 
 ADMIN ACCESS
