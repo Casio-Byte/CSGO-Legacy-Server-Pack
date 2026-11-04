@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.17.1-20261104"
+#define PLUGIN_VERSION "1.18.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -239,6 +239,7 @@ float g_RtvAllowedAt = 0.0;   // engine time
 char  g_RtvTarget[PLATFORM_MAX_PATH];
 ConVar g_cvDmLoadout;
 StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
+bool g_DmNoBuy = false;   // Deathmatch fixed loadout is on (checked every frame, so cached)
 bool g_BootModeDone = false;
 
 // Commands registered as sm_<name> so "!name" works too. ".name" works for everything in Dispatch().
@@ -657,6 +658,8 @@ public void OnClientPutInServer(int client)
 	if (g_AutoTeamPending[client])
 		CreateTimer(8.0, Timer_AutoTeamFallback, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 	SDKHook(client, SDKHook_TraceAttack, Hook_DuelTraceAttack);
+	if (!IsFakeClient(client))
+		SDKHook(client, SDKHook_PostThinkPost, Hook_DmNoBuyZone);
 	// In LAN mode / -insecure the admin check may never run; don't wait for it.
 	if (!IsFakeClient(client))
 		CreateTimer(4.0, Timer_JoinFallback, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
@@ -1734,6 +1737,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	if (DmLoadoutOn())
 	{
 		CreateTimer(0.5, Timer_DmLoadout, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(1.5, Timer_DmLoadout, event.GetInt("userid"), TIMER_FLAG_NO_MAPCHANGE); // bots buy a moment after spawning
 		return;
 	}
 	if (g_State != State_Knife)
@@ -2992,10 +2996,13 @@ char g_DmFfaCvars[][][] =
 	{ "mp_dm_time_between_bonus_max", "99999" },
 	{ "mp_dm_bonus_percent", "0" },
 };
+// No mp_buytime 0 here: bots that spawn in a buy zone wait to buy before they
+// move, and with buying impossible they stood still. Humans lose the buy menu
+// by never being "in a buy zone" instead (Hook_DmNoBuyZone); bots still buy,
+// and Timer_DmLoadout swaps whatever they bought for the AK / Deagle.
 char g_DmLoadoutCvars[][][] =
 {
-	{ "mp_buytime", "0" },
-	{ "mp_buy_anywhere", "0" },
+	{ "mp_buy_anywhere", "0" }, // the client would open the menu anywhere otherwise
 	{ "mp_t_default_primary", "weapon_ak47" },
 	{ "mp_ct_default_primary", "weapon_ak47" },
 	{ "mp_t_default_secondary", "weapon_deagle" },
@@ -3046,6 +3053,7 @@ void DmApply()
 		ServerCommand("bot_kick");
 		LogMessage("Deathmatch: bots re-added on Expert difficulty (bot_quota refills them).");
 	}
+	g_DmNoBuy = g_cvDmLoadout.BoolValue;
 	if (g_cvDmLoadout.BoolValue)
 	{
 		for (int i = 0; i < sizeof(g_DmLoadoutCvars); i++)
@@ -3059,6 +3067,7 @@ void DmApply()
    values (buy time, spawns...) win. The plugin's mode configs come after. */
 void DmRestore()
 {
+	g_DmNoBuy = false;
 	if (g_DmSaved == null || g_DmSaved.Size == 0)
 		return;
 	StringMapSnapshot snap = g_DmSaved.Snapshot();
@@ -3112,9 +3121,16 @@ public Action Timer_DmBuyMenu(Handle timer)
 
 public Action Listener_DmBuy(int client, const char[] command, int argc)
 {
-	if (client > 0 && DmLoadoutOn())
+	if (client > 0 && IsClientInGame(client) && !IsFakeClient(client) && DmLoadoutOn())
 		return Plugin_Handled;
 	return Plugin_Continue;
+}
+
+// Deathmatch: humans are never "in a buy zone", so the buy menu can't open.
+public void Hook_DmNoBuyZone(int client)
+{
+	if (g_DmNoBuy && GetEntProp(client, Prop_Send, "m_bInBuyZone"))
+		SetEntProp(client, Prop_Send, "m_bInBuyZone", 0);
 }
 
 void ApplyModeOnMapStart()

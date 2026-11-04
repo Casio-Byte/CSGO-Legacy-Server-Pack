@@ -7,6 +7,7 @@ Everything a CS:GO server needs, ready to drop in:
   SourceMod 1.12          plugin platform
   Source Scramble 0.7.1.4 extension used for weapon stickers
   PTaH 1.1.4              extension that redraws stickers as soon as they change
+                          and gives your chosen knife straight away on spawn
 
   csgo_match.smx          Match system: ready-up, knife round, side pick,
                           pauses, round restore, demo recording, practice
@@ -371,7 +372,9 @@ Game modes (admins)
   rules; the ready-up commands only apply in Competitive and Wingman.
   Deathmatch is free-for-all (everyone against everyone, random spawns),
   with no bonus weapon rounds. Everyone spawns with a knife, AK-47 and
-  Desert Eagle (with their own skins) and the buy menu is off.
+  Desert Eagle (with their own skins) and the buy menu is off for
+  players. (Bots still "buy" - the plugin swaps their guns for the AK
+  and Deagle - because bots that can't buy stand still.)
   Bots play on Expert in every mode (bot_difficulty 3 in server.cfg). Turn the fixed guns off with
   match_dm_loadout 0.
   Every mode: no team-select screen after a map loads - players are put

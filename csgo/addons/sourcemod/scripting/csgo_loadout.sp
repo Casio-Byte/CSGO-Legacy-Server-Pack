@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.4.2-20261104"
+#define PLUGIN_VERSION "1.5.0-20261104"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
@@ -60,17 +60,13 @@ public Extension __ext_sourcescramble =
 	required = 0,
 };
 
-/* Optional PTaH extension: forces a client full update so new stickers show
-   straight away (the same thing the original Weapon Stickers plugin does). */
-native void PTaH_ForceFullUpdate(int client);
-
-public Extension __ext_PTaH =
-{
-	name = "PTaH",
-	file = "PTaH.ext",
-	autoload = 1,
-	required = 0,
-};
+/* Optional PTaH extension:
+   - forces a client full update so new stickers show straight away
+   - GiveNamedItemPre: the game gives the chosen knife itself at spawn
+     (no remove-and-regive, which loses the race in Deathmatch respawns) */
+#define AUTOLOAD_EXTENSIONS
+#undef REQUIRE_EXTENSIONS
+#include <PTaH>
 
 public Plugin myinfo =
 {
@@ -260,6 +256,10 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 public void OnPluginStart()
 {
 	CreateConVar("csgo_loadout_version", PLUGIN_VERSION, "CS:GO Loadout version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
+	if (GetFeatureStatus(FeatureType_Native, "PTaH") == FeatureStatus_Available)
+		PTaH(PTaH_GiveNamedItemPre, Hook, PTaH_OnGiveNamedItemPre);
+	else
+		LogMessage("PTaH extension not loaded - knives are swapped after spawn instead of given directly.");
 
 	RegConsoleCmd("sm_ws", Cmd_Main);
 	RegConsoleCmd("sm_loadout", Cmd_Main);
@@ -580,6 +580,21 @@ bool GetGloveByDef(int def, GloveInfo g)
 bool IsKnifeDef(int def)
 {
 	return def == 42 || def == 59 || (def >= 500 && def <= 525);
+}
+
+// The game is about to give a default knife: give the chosen one instead.
+public Action PTaH_OnGiveNamedItemPre(int client, char classname[64], CEconItemView &item, bool &ignoredView, bool &originNull, float origin[3])
+{
+	if (!IsValidHuman(client) || !g_Loaded[client] || g_Knife[client] == 0)
+		return Plugin_Continue;
+	if (!StrEqual(classname, "weapon_knife") && !StrEqual(classname, "weapon_knife_t"))
+		return Plugin_Continue;
+	WeaponInfo w;
+	if (!GetWeaponByDef(g_Knife[client], w))
+		return Plugin_Continue;
+	strcopy(classname, sizeof(classname), w.cls);
+	ignoredView = true; // don't let the player's (empty) inventory item override it
+	return Plugin_Changed;
 }
 
 bool IsDefaultKnife(int def)

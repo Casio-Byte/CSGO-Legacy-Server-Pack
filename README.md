@@ -27,7 +27,7 @@ A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on 
 | Metamod:Source | 1.12 (32-bit only) | Plugin loader. `metamod_x64.vdf` is left out on purpose because it breaks the 32-bit server. |
 | SourceMod | 1.12.0.7259 | Plugin platform |
 | Source Scramble | 0.7.1.4 | Memory access for weapon stickers. 0.8.x is too new for this server. |
-| PTaH | 1.1.4 | Forces a full update so sticker changes show instantly |
+| PTaH | 1.1.4 | Forces a full update so sticker changes show instantly, and gives the chosen knife directly when the game hands out a default knife |
 | CS:GO SteamFix | from FNScence repo | Accepts CS:GO Legacy players whose Steam ticket check fails. Third-party closed source. |
 | REST in Pawn | from FNScence repo | Needed by eItems |
 | **csgo_match.smx** | custom | Match system and game modes (below) |
@@ -277,6 +277,8 @@ The plugins use SourcePawn 1.11+ and the SourceMod 1.12 includes:
 spcomp csgo_match.sp   -o csgo_match.smx
 spcomp csgo_loadout.sp -o csgo_loadout.smx
 ```
+
+`csgo_loadout.sp` needs `PTaH.inc` (in `csgo/addons/sourcemod/scripting/include/`). Add it with `-i csgo/addons/sourcemod/scripting/include`.
 
 Compiled `.smx` files are already in `csgo/addons/sourcemod/plugins/`.
 
