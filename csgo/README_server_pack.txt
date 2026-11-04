@@ -196,6 +196,7 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\practice\       Practice
   csgo\maps\modes\1v1\            1v1 duels
   csgo\maps\modes\arena\          Multi-1v1 arenas
+  csgo\maps\modes\retakes\        Retakes
 
 Each folder also has a maplist.txt of standard maps for that mode. Installed
 ones are listed near the top of the menu; missing ones are shown greyed out
@@ -294,6 +295,9 @@ Commands only work in the modes they belong to (anything else says so):
   !bo3 / !bo1 / !series Competitive 5v5 only
   !duel and its answers 1v1 duels and Multi-1v1 arenas only
   !guns / !sitout / !rank  Multi-1v1 arenas only
+  !guns                 also in Retakes (the retakes loadout menu)
+  !rtv                  every mode, but not during a live 5v5 / wingman
+                        match or a best of 3
   Skins (!ws etc.), !gamemode, !1v1, !map, !options, !help, !status work
   everywhere. !help lists just the commands for the current mode.
 
@@ -309,6 +313,7 @@ Game modes (admins)
                           Practice          practice mode on the chosen map
                           1v1 duels         !duel lobby on aim maps
                           Multi-1v1 arenas  many 1v1s at once on am_ maps
+                          Retakes           bomb-site retakes (see RETAKES)
                           Match options     opens !options
                         The map menu also has "All maps on the server...".
                         The map menu lists, in order: the current map, the
@@ -351,6 +356,8 @@ Game modes (admins)
     ar_ maps                        Arms Race only
     normal maps (de_, cs_, gd_...)  Competitive, Wingman, Casual,
                                     Deathmatch, Demolition, Practice
+                                    (+ Retakes for bomb maps that have
+                                    retakes spawns)
     kz_ / bhop_ / surf_ maps        no mode (those modes were removed)
   A map you put in a mode's own folder always counts for that mode. The
   map menus only list fitting maps; !map on a map that doesn't suit the
@@ -543,6 +550,46 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
   match_dm_loadout                    (1 = knife + AK-47 + Deagle in
                                        Deathmatch, no buy menu)
   match_skip_team_menu                (1 = auto-join a team, no team menu)
+  match_rtv_enabled                   (1 = !rtv allowed)
+  match_rtv_ratio                     (share of players needed, 0.6)
+
+
+RETAKES
+-------
+Pick "Retakes" in !gamemode (or as the default mode in start_server.bat
+setup). Every round the terrorists have already planted on a random site
+and the CTs have to retake it. Teams are balanced automatically; players
+waiting for a slot join next round. Up to 9 players (sm_retakes_maxplayers).
+
+  !guns                 loadout menu (the standard retakes allocator):
+                        CT rifle (M4A4 / M4A1-S / AUG), T rifle (AK-47 /
+                        SG 553) and whether you want the AWP (one per
+                        team). Every round is a full buy: rifle, pistol,
+                        armour + helmet, a random grenade, kits for CTs.
+                        Your !loadout pistol picks (e.g. USP-S) and skins
+                        still apply.
+  !scramble (admin)     shuffle the teams next round
+
+Spawns come with the pack for 24 maps (de_dust2, mirage, inferno, nuke,
+overpass, vertigo, ancient, anubis, train, cache, cbble ... see
+addons\sourcemod\configs\retakes). Only those maps are offered for
+Retakes. To add a map: load it in Retakes mode, type !edit (admin) and
+follow the menu, then !savespawns.
+Settings: cfg\sourcemod\retakes\retakes.cfg (made on first start) and
+retakes_game.cfg. The retakes plugin only runs in Retakes mode - the
+match plugin switches it on and off with the mode.
+
+
+ROCK THE VOTE
+-------------
+Type !rtv (or just rtv) to ask for a map change. When 60% of the players
+have (match_rtv_ratio), everyone votes between up to 6 maps of the
+current mode (installed and suited to it) and "Stay". The winner loads in
+5 seconds, in the same mode. !unrtv takes your vote back.
+  - works in every mode, but never during a live 5v5 or wingman match
+    (knife round and side pick included) or a best of 3. Warmup is fine.
+  - opens 30 seconds after a map loads; after a vote that stays, the
+    next one can start 3 minutes later.
 
 
 ADMIN ACCESS
@@ -567,3 +614,5 @@ Admin commands need the "b" or "z" flag. Two ways to get it:
 
 Credits: skin/glove handling follows kgns' Weapons & Knives and Gloves;
 sticker method and gamedata from quasemago's CS:GO Weapon Stickers (GPLv3).
+Retakes: splewis' csgo-retakes 0.3.4 with its standard allocator (GPLv3);
+source in addons\sourcemod\scripting\retakes_source.

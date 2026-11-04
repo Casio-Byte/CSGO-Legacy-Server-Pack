@@ -1,0 +1,33 @@
+Maps for: Retakes
+=================
+
+Put .bsp map files for this game mode in this folder:
+    csgo\maps\modes\retakes\
+
+When an admin picks "Retakes" in !gamemode (or !1v1), the map menu shows:
+  1. every .bsp in this folder
+  2. the installed maps from maplist.txt
+  3. other suitable maps on the server
+  4. maplist.txt maps that aren't installed, greyed out
+
+Standard maps for this mode (maplist.txt):
+    de_dust2, de_mirage, de_inferno, de_nuke, de_overpass, de_vertigo, de_ancient,
+    de_anubis, de_train, de_cache
+
+These are official CS:GO maps, so they're already installed with the
+server - nothing to download. Any that are missing from your install
+show greyed out in the menu.
+
+  - Retakes needs spawn points for each map. The pack has them for 24 maps
+    (addons\sourcemod\configs\retakes\). For another bomb map, load it in
+    Retakes mode and use !edit (admin) to place spawns, then !savespawns.
+    Maps without spawns aren't offered in the Retakes map menu.
+  - Copy the .bsp file (and its .nav file, if it has one) here.
+  - The file name is the map name: de_cache.bsp shows as de_cache.
+  - Add or remove names in maplist.txt to change the standard list.
+  - No restart needed - just open the menu again.
+  - If the map needs extra files (models, sounds, materials), put those in
+    the normal csgo\models, csgo\sound and csgo\materials folders, or use a
+    map whose .bsp has them packed in.
+
+You can delete this text file.

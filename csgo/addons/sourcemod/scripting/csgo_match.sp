@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.15.0-20261104"
+#define PLUGIN_VERSION "1.16.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -154,6 +154,7 @@ bool g_PracticeNext = false;   // set by !gamemode / !prac so practice survives 
 /* 1v1 duels / Multi-1v1 arenas */
 bool  g_OneVOneNext = false;     // 1v1 duel lobby (survives map changes)
 bool  g_ArenaNext = false;       // Multi-1v1 arenas (survives map changes)
+bool  g_RetakesNext = false;     // Retakes (survives map changes; the retakes plugin runs the rounds)
 
 /* !map */
 #define MAPCAT_ALL      -3
@@ -227,6 +228,13 @@ int  g_ArenaDuel[MAX_ARENAS];          // arena duel playing in this arena this 
 int  g_ArenaDuelWep[MAX_ARENAS];       // gun for this round (random duels pick one per round)
 ConVar g_cvArenaShuffle;
 ConVar g_cvSkipTeamMenu;
+ConVar g_cvRtvEnabled;
+ConVar g_cvRtvRatio;
+bool  g_RtvVoted[MAXPLAYERS + 1];
+bool  g_RtvVoteRunning = false;
+bool  g_RtvChanging = false;
+float g_RtvAllowedAt = 0.0;   // engine time
+char  g_RtvTarget[PLATFORM_MAX_PATH];
 ConVar g_cvDmLoadout;
 StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
 bool g_BootModeDone = false;
@@ -244,7 +252,8 @@ char g_RegisteredCmds[][] =
 	"duel", "1v1", "accept", "decline", "forfeit", "ff", "endduel",
 	"gamemode", "mode", "modes", "options", "settings",
 	"guns", "sitout", "rank", "maps", "changemap",
-	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries"
+	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries",
+	"rtv", "rockthevote", "unrtv"
 };
 
 /* ------------------------------------------------------------------ */
@@ -502,6 +511,8 @@ public void OnPluginStart()
 	g_cvVetoTime      = CreateConVar("match_veto_time", "25", "Seconds a team gets to vote on each map ban/pick", _, true, 10.0, true, 120.0);
 	g_cvSkipTeamMenu  = CreateConVar("match_skip_team_menu", "1", "1 = no team-select screen when a player joins or a map loads; they're put on a team automatically (M still opens it)", _, true, 0.0, true, 1.0);
 	g_cvDmLoadout     = CreateConVar("match_dm_loadout", "1", "Deathmatch: 1 = everyone spawns with knife, AK-47 and Desert Eagle, and the buy menu is off (Deathmatch is always free-for-all)", _, true, 0.0, true, 1.0);
+	g_cvRtvEnabled    = CreateConVar("match_rtv_enabled", "1", "1 = players can rock the vote (!rtv) for a new map of the current mode. Never during a live 5v5 / wingman match.", _, true, 0.0, true, 1.0);
+	g_cvRtvRatio      = CreateConVar("match_rtv_ratio", "0.6", "Share of players that must type !rtv to start the map vote", _, true, 0.05, true, 1.0);
 	CreateConVar("csgo_match_version", PLUGIN_VERSION, "CS:GO Match version", FCVAR_NOTIFY | FCVAR_DONTRECORD);
 	LogMessage("CS:GO Match %s loaded", PLUGIN_VERSION);
 	PrintToServer("[Match] CS:GO Match %s loaded", PLUGIN_VERSION);
@@ -595,6 +606,8 @@ void ApplyBootMode()
 		g_OneVOneNext = true;
 	else if (StrEqual(mode, "arena", false))
 		g_ArenaNext = true;
+	else if (StrEqual(mode, "retakes", false))
+		g_RetakesNext = true;
 	else
 		return;
 	LogMessage("Starting in %s mode (from the launch options).", mode);
@@ -662,6 +675,11 @@ public void OnClientDisconnect(int client)
 	g_VetoVote[client] = -1;
 	if (g_VetoRunning)
 		RequestFrame(Frame_VetoCheckDone, g_VetoSerial);
+	if (g_RtvVoted[client])
+	{
+		g_RtvVoted[client] = false;
+		RequestFrame(Frame_RtvCheck);
+	}
 }
 
 /* ------------------------------------------------------------------ */
@@ -681,6 +699,11 @@ public Action Command_Generic(int client, int args)
 
 public void OnClientSayCommand_Post(int client, const char[] command, const char[] sArgs)
 {
+	if (client > 0 && (StrEqual(sArgs, "rtv", false) || StrEqual(sArgs, "rockthevote", false)))
+	{
+		Dispatch(client, "rtv", "");
+		return;
+	}
 	if (client <= 0 || sArgs[0] != '.')
 		return;
 
@@ -761,6 +784,8 @@ bool CommandAllowedHere(int client, const char[] cmd)
 		return true;
 	}
 	// Arena commands.
+	if (IsAny(cmd, "guns") && (g_RetakesNext || CurrentMode() == GM_Retakes))
+		return false; // the retakes plugin's own !guns menu answers this one
 	if (IsAny(cmd, "guns sitout rank"))
 	{
 		if (g_State != State_Arena && CurrentMode() != GM_Arena)
@@ -826,6 +851,9 @@ void Dispatch(int client, const char[] cmd, const char[] arg)
 	else if (Is(cmd, "bo3") || Is(cmd, "veto"))                          Cmd_Bo3(client);
 	else if (Is(cmd, "bo1"))                                             Cmd_Bo1(client);
 	else if (Is(cmd, "endseries") || Is(cmd, "cancelseries"))            Cmd_EndSeries(client);
+	// rock the vote
+	else if (Is(cmd, "rtv") || Is(cmd, "rockthevote"))                   Cmd_Rtv(client, true);
+	else if (Is(cmd, "unrtv"))                                           Cmd_Rtv(client, false);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1312,7 +1340,10 @@ void Cmd_Help(int client)
 		Reply(client, "\x04Duel:\x01 !duel [name] (opponent, gun, rounds, headshots only) !accept !decline !forfeit");
 	if (g_State == State_Arena)
 		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank — !duel gets you your own arena");
+	if (CurrentMode() == GM_Retakes)
+		Reply(client, "\x04Retakes:\x01 !guns (pick your weapons)");
 	Reply(client, "\x04Skins:\x01 !ws !presets !knife !gloves !agents !stickers");
+	Reply(client, "\x04Map:\x01 !rtv (rock the vote - not during a live match)");
 	if (admin)
 		Reply(client, "\x04Modes:\x01 !gamemode !1v1 !map !options");
 	else
@@ -2824,12 +2855,13 @@ enum
 	GM_Practice,
 	GM_1v1Match,
 	GM_Arena,
+	GM_Retakes,
 	GM_COUNT
 };
 
-char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "1v1 duels", "Multi-1v1 arenas" };
-int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0 };
-int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 1, 0 };
+char g_GmName[GM_COUNT][] = { "Competitive 5v5", "Wingman 2v2", "Casual", "Deathmatch", "Arms Race", "Demolition", "Practice", "1v1 duels", "Multi-1v1 arenas", "Retakes" };
+int  g_GmType[GM_COUNT]   = { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0 };
+int  g_GmMode[GM_COUNT]   = { 1, 2, 0, 2, 0, 1, 1, 1, 0, 1 };
 // Each mode has its own map folder: csgo/maps/modes/<folder>/
 // Standard maps written to maps/modes/<folder>/maplist.txt if that file is missing.
 char g_GmDefaultMaps[GM_COUNT][] =
@@ -2842,11 +2874,12 @@ char g_GmDefaultMaps[GM_COUNT][] =
 	"de_lake de_safehouse de_bank de_shortnuke",
 	"de_mirage de_inferno de_dust2 de_nuke de_ancient",
 	"aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars awp_india_csgo aim_biove_texture aim_crashz_dust_1on1 aim_map_usp_s aim_dust_go",
-	"am_must2 am_dust2 am_texture2 am_aztec2 am_grass2 am_warehouse2 am_water am_trainyard am_skybound am_crashz_dust am_inferno_banana_dolnma"
+	"am_must2 am_dust2 am_texture2 am_aztec2 am_grass2 am_warehouse2 am_water am_trainyard am_skybound am_crashz_dust am_inferno_banana_dolnma",
+	"de_dust2 de_mirage de_inferno de_nuke de_overpass de_vertigo de_ancient de_anubis de_train de_cache"
 };
 // Older packs' default lists, replaced automatically (edited lists are left alone).
-char g_GmOldMaps[GM_COUNT][] = { "", "", "", "", "", "", "", "de_shortdust de_lake de_shortnuke gd_rialto", "am_inferno_banana_dolnma am_walterv2" };
-char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "1v1", "arena" };
+char g_GmOldMaps[GM_COUNT][] = { "", "", "", "", "", "", "", "de_shortdust de_lake de_shortnuke gd_rialto", "am_inferno_banana_dolnma am_walterv2", "" };
+char g_GmFolder[GM_COUNT][] = { "competitive", "wingman", "casual", "deathmatch", "armsrace", "demolition", "practice", "1v1", "arena", "retakes" };
 
 char g_MapPool[][] =
 {
@@ -2874,6 +2907,8 @@ int CurrentMode()
 		return GM_Practice;
 	if (g_ArenaNext)
 		return GM_Arena;
+	if (g_RetakesNext)
+		return GM_Retakes;
 	if (g_OneVOneNext)
 		return GM_1v1Match;
 	int type = GetCvarInt("game_type");
@@ -2903,7 +2938,7 @@ bool IsWingman()
 // Modes where the ready-up / knife / live match flow runs.
 bool IsMatchMode()
 {
-	if (g_ArenaNext || g_OneVOneNext)
+	if (g_ArenaNext || g_OneVOneNext || g_RetakesNext)
 		return false;
 	if (GetCvarInt("game_type") != 0)
 		return false;
@@ -3040,6 +3075,8 @@ public Action Listener_DmBuy(int client, const char[] command, int argc)
 void ApplyModeOnMapStart()
 {
 	SeriesOnMapStart();
+	SetRetakesPlugin(g_RetakesNext);
+	RtvOnMapStart();
 	if (!DmActive())
 		DmRestore();
 	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -3056,6 +3093,11 @@ void ApplyModeOnMapStart()
 	if (g_OneVOneNext)
 	{
 		EnterDuelLobby();
+		return;
+	}
+	if (g_RetakesNext)
+	{
+		EnterRetakes();
 		return;
 	}
 	if (IsMatchMode())
@@ -3077,6 +3119,327 @@ void ApplyModeOnMapStart()
 	CreateTimer(1.0, Timer_DmBuyMenu, _, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(5.0, Timer_DmBuyMenu, _, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(5.0, Timer_ModeAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+/* ---------- Rock the vote (every mode, never during a live match) ---------- */
+
+bool RtvBlocked(char[] why, int maxlen)
+{
+	if (g_State == State_Live || g_State == State_Knife || g_State == State_SideSelect)
+	{
+		strcopy(why, maxlen, "Rock the vote is off during a live match.");
+		return true;
+	}
+	if (g_SeriesActive || g_VetoRunning)
+	{
+		strcopy(why, maxlen, "Rock the vote is off during a best of 3.");
+		return true;
+	}
+	return false;
+}
+
+int RtvHumans()
+{
+	int n = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && !IsFakeClient(i))
+			n++;
+	}
+	return n;
+}
+
+int RtvVotes()
+{
+	int n = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (g_RtvVoted[i] && IsClientInGame(i) && !IsFakeClient(i))
+			n++;
+	}
+	return n;
+}
+
+int RtvNeeded()
+{
+	int need = RoundToCeil(float(RtvHumans()) * g_cvRtvRatio.FloatValue);
+	return need < 1 ? 1 : need;
+}
+
+void RtvOnMapStart()
+{
+	for (int i = 0; i <= MaxClients; i++)
+		g_RtvVoted[i] = false;
+	g_RtvVoteRunning = false;
+	g_RtvChanging = false;
+	g_RtvAllowedAt = GetEngineTime() + 30.0;
+}
+
+void Cmd_Rtv(int client, bool on)
+{
+	if (!CheckInGame(client))
+		return;
+	if (!g_cvRtvEnabled.BoolValue)
+	{
+		Reply(client, "Rock the vote is turned off on this server.");
+		return;
+	}
+	char why[96];
+	if (RtvBlocked(why, sizeof(why)))
+	{
+		Reply(client, "%s", why);
+		return;
+	}
+	if (!on)
+	{
+		if (g_RtvVoted[client])
+		{
+			g_RtvVoted[client] = false;
+			Announce("%N took back their rock the vote (\x04%d/%d\x01).", client, RtvVotes(), RtvNeeded());
+		}
+		return;
+	}
+	if (g_RtvVoteRunning || g_RtvChanging)
+	{
+		Reply(client, "A map vote is already running.");
+		return;
+	}
+	float wait = g_RtvAllowedAt - GetEngineTime();
+	if (wait > 0.0)
+	{
+		Reply(client, "Rock the vote opens in \x04%d\x01 seconds.", RoundToCeil(wait));
+		return;
+	}
+	if (g_RtvVoted[client])
+	{
+		Reply(client, "You already rocked the vote (\x04%d/%d\x01).", RtvVotes(), RtvNeeded());
+		return;
+	}
+	g_RtvVoted[client] = true;
+	Announce("%N wants to rock the vote (\x04%d/%d\x01) - type \x04!rtv\x01 to join.", client, RtvVotes(), RtvNeeded());
+	RtvCheck();
+}
+
+public void Frame_RtvCheck(any data)
+{
+	RtvCheck();
+}
+
+void RtvCheck()
+{
+	if (g_RtvVoteRunning || g_RtvChanging || RtvVotes() == 0 || RtvVotes() < RtvNeeded())
+		return;
+	char why[96];
+	if (RtvBlocked(why, sizeof(why)))
+		return;
+	StartRtvVote();
+}
+
+// The current mode's maps (installed and suited to it), current map left out.
+void CollectModeMaps(int gm, ArrayList paths)
+{
+	Menu tmp = new Menu(Handler_RtvVote);
+	StringMap seen = new StringMap();
+	char current[PLATFORM_MAX_PATH], currentName[PLATFORM_MAX_PATH];
+	GetCurrentMap(current, sizeof(current));
+	GetMapDisplayName(current, currentName, sizeof(currentName));
+	seen.SetValue(currentName, 1);
+	int keep = g_MenuGm;
+	g_MenuGm = gm;
+	AddFolderMaps(tmp, gm, seen);
+	AddStandardMaps(tmp, gm, seen);
+	if (gm == GM_Wingman)
+		for (int i = 0; i < sizeof(g_WingmanMaps); i++) AddMapItem(tmp, g_WingmanMaps[i], seen);
+	else if (gm == GM_ArmsRace)
+		for (int i = 0; i < sizeof(g_ArmsRaceMaps); i++) AddMapItem(tmp, g_ArmsRaceMaps[i], seen);
+	else if (gm == GM_Demolition)
+		for (int i = 0; i < sizeof(g_DemolitionMaps); i++) AddMapItem(tmp, g_DemolitionMaps[i], seen);
+	if (gm == GM_Arena || gm == GM_1v1Match)
+		AddPrefixedMaps(tmp, gm, seen);
+	else
+		for (int i = 0; i < sizeof(g_MapPool); i++) AddMapItem(tmp, g_MapPool[i], seen);
+	g_MenuGm = keep;
+
+	char path[PLATFORM_MAX_PATH];
+	for (int i = 0; i < tmp.ItemCount; i++)
+	{
+		tmp.GetItem(i, path, sizeof(path));
+		if (path[0] != '#')
+			paths.PushString(path);
+	}
+	delete seen;
+	delete tmp;
+}
+
+void StartRtvVote()
+{
+	if (IsVoteInProgress())
+	{
+		CreateTimer(5.0, Timer_RtvRetry, _, TIMER_FLAG_NO_MAPCHANGE);
+		return;
+	}
+	ArrayList maps = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+	CollectModeMaps(CurrentMode(), maps);
+	if (maps.Length == 0)
+	{
+		Announce("Rock the vote: no other maps are installed for this mode.");
+		delete maps;
+		RtvReset(120.0);
+		return;
+	}
+	char mode[40], current[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH], path[PLATFORM_MAX_PATH], line[96];
+	GetModeName(mode, sizeof(mode));
+	GetCurrentMap(current, sizeof(current));
+	GetMapDisplayName(current, name, sizeof(name));
+
+	Menu vote = new Menu(Handler_RtvVote, MENU_ACTIONS_DEFAULT | MenuAction_VoteEnd | MenuAction_VoteCancel);
+	vote.SetTitle("Rock the vote - next map (%s)", mode);
+	int picks = maps.Length < 6 ? maps.Length : 6;
+	for (int i = 0; i < picks; i++)
+	{
+		int r = GetRandomInt(i, maps.Length - 1);
+		maps.SwapAt(i, r);
+		maps.GetString(i, path, sizeof(path));
+		MapShortName(path, line, sizeof(line));
+		vote.AddItem(path, line);
+	}
+	Format(line, sizeof(line), "Stay on %s", name);
+	vote.AddItem("#stay", line);
+	vote.ExitButton = false;
+	delete maps;
+
+	g_RtvVoteRunning = true;
+	Announce("Rock the vote! Pick the next map (\x0420\x01 seconds).");
+	vote.DisplayVoteToAll(20);
+}
+
+public Action Timer_RtvRetry(Handle timer)
+{
+	RtvCheck();
+	return Plugin_Stop;
+}
+
+void RtvReset(float cooldown)
+{
+	for (int i = 0; i <= MaxClients; i++)
+		g_RtvVoted[i] = false;
+	g_RtvVoteRunning = false;
+	g_RtvAllowedAt = GetEngineTime() + cooldown;
+}
+
+public int Handler_RtvVote(Menu menu, MenuAction action, int param1, int param2)
+{
+	if (action == MenuAction_End)
+	{
+		delete menu;
+	}
+	else if (action == MenuAction_VoteCancel)
+	{
+		Announce("Rock the vote: nobody voted - staying on this map.");
+		RtvReset(180.0);
+	}
+	else if (action == MenuAction_VoteEnd)
+	{
+		char path[PLATFORM_MAX_PATH], name[PLATFORM_MAX_PATH];
+		menu.GetItem(param1, path, sizeof(path), _, name, sizeof(name));
+		char why[96];
+		if (StrEqual(path, "#stay"))
+		{
+			Announce("Rock the vote: staying on this map.");
+			RtvReset(180.0);
+		}
+		else if (RtvBlocked(why, sizeof(why)))
+		{
+			Announce("Rock the vote: %s Staying on this map.", why);
+			RtvReset(180.0);
+		}
+		else
+		{
+			g_RtvVoteRunning = false;
+			g_RtvChanging = true;
+			strcopy(g_RtvTarget, sizeof(g_RtvTarget), path);
+			Announce("Rock the vote: \x04%s\x01 won - changing map in 5 seconds.", name);
+			CreateTimer(5.0, Timer_RtvChange, _, TIMER_FLAG_NO_MAPCHANGE);
+		}
+	}
+	return 0;
+}
+
+public Action Timer_RtvChange(Handle timer)
+{
+	char why[96];
+	if (RtvBlocked(why, sizeof(why)))
+	{
+		g_RtvChanging = false;
+		Announce("Rock the vote: %s The map change was cancelled.", why);
+		return Plugin_Stop;
+	}
+	char target[PLATFORM_MAX_PATH];
+	if (!ResolveMap(g_RtvTarget, target, sizeof(target)))
+	{
+		g_RtvChanging = false;
+		Announce("\x02Rock the vote: %s isn't installed any more.\x01", g_RtvTarget);
+		return Plugin_Stop;
+	}
+	// Same mode, new map: the mode flags and game_type/game_mode stay as they are.
+	ServerCommand("changelevel %s", target);
+	return Plugin_Stop;
+}
+
+/* ---------- Retakes (the bundled retakes plugin runs the rounds) ---------- */
+
+void SetRetakesPlugin(bool on)
+{
+	ConVar cv = FindConVar("sm_retakes_enabled");
+	if (cv != null && cv.BoolValue != on)
+		cv.BoolValue = on;
+}
+
+bool RetakesHasSpawns(const char[] map)
+{
+	char name[PLATFORM_MAX_PATH], path[PLATFORM_MAX_PATH];
+	MapShortName(map, name, sizeof(name));
+	BuildPath(Path_SM, path, sizeof(path), "configs/retakes/%s.cfg", name);
+	return FileExists(path);
+}
+
+void EnterRetakes()
+{
+	DuelCleanup();
+	ResetMatch();
+	StopDemo();
+	g_State = State_None;
+	NoGameEnd();
+	if (FindConVar("sm_retakes_enabled") == null)
+	{
+		LogError("Retakes mode: retakes.smx isn't loaded (addons/sourcemod/plugins).");
+		CreateTimer(5.0, Timer_RetakesMissing, _, TIMER_FLAG_NO_MAPCHANGE);
+		return;
+	}
+	char map[PLATFORM_MAX_PATH];
+	GetCurrentMap(map, sizeof(map));
+	if (!RetakesHasSpawns(map))
+		LogMessage("Retakes: %s has no spawns in configs/retakes - an admin can add them with !edit.", map);
+	CreateTimer(8.0, Timer_RetakesAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_RetakesMissing(Handle timer)
+{
+	Announce("\x02Retakes isn't installed on this server\x01 (retakes.smx missing). Admins: pick another mode with \x04!gamemode\x01.");
+	return Plugin_Stop;
+}
+
+public Action Timer_RetakesAnnounce(Handle timer)
+{
+	if (!g_RetakesNext)
+		return Plugin_Stop;
+	char map[PLATFORM_MAX_PATH];
+	GetCurrentMap(map, sizeof(map));
+	if (RetakesHasSpawns(map))
+		Announce("Game mode: \x04Retakes\x01. Type \x04!guns\x01 to pick your weapons. Admins can change mode with \x04!gamemode\x01.");
+	else
+		Announce("\x02This map has no retakes spawns yet.\x01 Admins: \x04!gamemode\x01 → Retakes for a map that has them, or \x04!edit\x01 to add spawns.");
+	return Plugin_Stop;
 }
 
 public Action Timer_ModeAnnounce(Handle timer)
@@ -3142,6 +3505,8 @@ void ShowGameModeMenu(int client)
 			StrCat(line, sizeof(line), " (ready-up match)");
 		else if (i == GM_1v1Match)
 			StrCat(line, sizeof(line), " (!duel lobby)");
+		else if (i == GM_Retakes)
+			StrCat(line, sizeof(line), " (!guns loadouts)");
 		menu.AddItem(info, line);
 	}
 	menu.AddItem("options", "Match options...");
@@ -3205,6 +3570,8 @@ bool MapFitsMode(int gm, const char[] path)
 	if (want >= 0)
 		return want == gm;
 	// a normal map: every mode except the ones with their own map types
+	if (gm == GM_Retakes)
+		return RetakesHasSpawns(path); // bomb maps with retakes spawns
 	return gm != GM_Arena && gm != GM_1v1Match && gm != GM_ArmsRace;
 }
 
@@ -3344,6 +3711,9 @@ public Action Timer_SwitchMode(Handle timer)
 		ResetArenaCvars();
 	g_OneVOneNext = (gm == GM_1v1Match);
 	g_ArenaNext = (gm == GM_Arena);
+	g_RetakesNext = (gm == GM_Retakes);
+	// Before the map change, so the retakes plugin starts (or stays out of) the new map itself.
+	SetRetakesPlugin(g_RetakesNext);
 	if (g_cvDuelActive != null)
 		g_cvDuelActive.BoolValue = false;
 	ServerCommand("game_type %d", g_GmType[gm]);
@@ -6038,7 +6408,7 @@ void SeriesOnMapStart()
 	char current[PLATFORM_MAX_PATH];
 	GetCurrentMap(current, sizeof(current));
 	if (!SameMap(current, g_SeriesMaps[g_SeriesMapIndex]) || g_PracticeNext
-		|| g_ArenaNext || g_OneVOneNext)
+		|| g_ArenaNext || g_OneVOneNext || g_RetakesNext)
 	{
 		LogMessage("Best-of-3 series cancelled: %s was loaded instead of %s.", current, g_SeriesMaps[g_SeriesMapIndex]);
 		CancelSeries("");

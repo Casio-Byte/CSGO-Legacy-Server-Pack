@@ -34,6 +34,7 @@ A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on 
 | **csgo_loadout.smx** | custom | Skins and loadouts (below) |
 | nolobbyreservation.smx | from FNScence repo | Stops "lobby only" reservations that drop internet players right after connecting |
 | eItems + eSprays | from FNScence repo | `!spray` graffiti. About 140 MB of spray images in `csgo/materials/decals/eitems`. |
+| retakes + retakes_standardallocator | 0.3.4 (splewis) | Retakes mode with `!guns` loadouts. Only runs while Retakes mode is on. |
 | pugsetup, weapons, gloves | from FNScence repo | **Disabled** (`plugins/disabled`) because they clash with CS:GO Match and CS:GO Loadout |
 
 ---
@@ -132,7 +133,8 @@ Commands only work in the modes they belong to; anywhere else they say so. `!hel
 | `!ready` `!pause` `!stop`, side pick, `!start` `!restart` etc. | Competitive 5v5, Wingman 2v2 (and Practice) |
 | `!bo3` `!bo1` `!series` `!endseries` | Competitive 5v5 |
 | `!duel` `!accept` `!decline` `!forfeit` | 1v1 duels, Multi-1v1 arenas |
-| `!guns` `!sitout` `!rank` | Multi-1v1 arenas |
+| `!guns` `!sitout` `!rank` | Multi-1v1 arenas (`!guns` is also the Retakes loadout menu) |
+| `!rtv` `!unrtv` | every mode, except during a live 5v5 / wingman match or a best of 3 |
 | skins, `!gamemode`, `!1v1`, `!map`, `!options`, `!help`, `!status` | everywhere |
 
 ### Game modes: `!gamemode` (admins)
@@ -147,6 +149,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
 | 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
+| Retakes | bomb planted on a random site every round, CTs retake it. Standard retakes allocator: `!guns` picks the CT rifle (M4A4 / M4A1-S / AUG), the T rifle (AK-47 / SG 553) and whether you want the AWP (one per team). Every round is a full buy with armour, a random grenade and kits; `!loadout` pistol picks and skins still apply. Spawns included for 24 maps; admins add more with `!edit`. |
 
 In every mode there's no team-select screen after a map loads: players are put on the smaller team automatically, and **M** still opens the menu to switch (`match_skip_team_menu 0` to turn this off).
 
@@ -155,11 +158,15 @@ In every mode there's no team-select screen after a map loads: players are put o
 - `aim_`, `awp_` and `1v1_` maps: 1v1 duels
 - `ar_` maps: Arms Race
 - normal maps (`de_`, `cs_`, `gd_` …): Competitive, Wingman, Casual, Deathmatch, Demolition and Practice
+- Retakes: bomb maps that have retakes spawns (`addons/sourcemod/configs/retakes/<map>.cfg`)
 - `kz_`, `bhop_` and `surf_` maps: no mode
 
 A map in a mode's own folder always counts for that mode. The map menus only list maps that fit, and `!map` on a map that doesn't suit the current mode asks which fitting mode to switch to.
 
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
+
+### Rock the vote: `!rtv`
+Type `!rtv` (or just `rtv`). When 60% of players have (`match_rtv_ratio`), everyone votes between up to 6 maps of the current mode and "Stay"; the winner loads in the same mode. Works in every mode, but **never during a live 5v5 or wingman match** (knife round and side pick included) or a best of 3. Warmup is fine. Opens 30 s after a map loads; after a "stay" result the next vote can start 3 minutes later. `match_rtv_enabled 0` turns it off.
 
 ### Match flow
 Warmup → `!ready` → (map vote if best of 3) → knife round → winners `!stay` / `!switch` / `!t` / `!ct` → **LIVE**
@@ -275,4 +282,5 @@ Compiled `.smx` files are already in `csgo/addons/sourcemod/plugins/`.
 - SourceMod, Metamod:Source (AlliedModders), Source Scramble (nosoop) and PTaH (komashchenko).
 - Skin and glove handling follows kgns' *Weapons & Knives* and *Gloves*. The sticker method and gamedata come from quasemago's *CS:GO Weapon Stickers* (GPLv3).
 - [FNScence/CSGO-Legacy-Server](https://github.com/FNScence/CSGO-Legacy-Server): SteamFix (by E0n3x), NoLobbyReservation, eItems/eSprays, pugsetup, ESL configs.
+- Retakes: [splewis/csgo-retakes](https://github.com/splewis/csgo-retakes) 0.3.4 with the standard allocator (GPLv3). Source in `csgo/addons/sourcemod/scripting/retakes_source/`. It's patched to start switched off (the match plugin turns it on in Retakes mode).
 - Community maps: varq.net.

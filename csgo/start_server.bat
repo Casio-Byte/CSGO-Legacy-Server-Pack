@@ -199,7 +199,8 @@ $modes = @(
     @('Demolition',       'demolition',  1, 1, '',         'de_lake'),
     @('Practice',         'practice',    0, 1, 'practice', 'de_mirage'),
     @('1v1 duels',        '1v1',         0, 1, '1v1',      'aim_redline'),
-    @('Multi-1v1 arenas', 'arena',       0, 0, 'arena',    'am_must2')
+    @('Multi-1v1 arenas', 'arena',       0, 0, 'arena',    'am_must2'),
+    @('Retakes (!guns loadouts)', 'retakes', 0, 1, 'retakes', 'de_dust2')
 )
 
 # Which modes a map suits (same rules as the match plugin).
@@ -209,6 +210,10 @@ function MapFits([string]$m, [string]$folder) {
     if ($m.StartsWith('am_'))  { return $folder -eq 'arena' }
     if ($m -match '^(aim_|awp_|1v1_|training_aim)') { return $folder -eq '1v1' }
     if ($m.StartsWith('ar_'))  { return $folder -eq 'armsrace' }
+    if ($folder -eq 'retakes') {
+        # bomb maps with retakes spawns (the pack has them for 24 maps)
+        return (Test-Path (Join-Path $csgo "addons\sourcemod\configs\retakes\$m.cfg"))
+    }
     return @('competitive', 'wingman', 'casual', 'deathmatch', 'demolition', 'practice') -contains $folder
 }
 
