@@ -147,9 +147,11 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Casual / Arms Race / Demolition | the game's own rules |
 | Deathmatch | **free-for-all**, built on Casual (instant respawn, 2 s spawn protection, one endless round; the game's own DM mode left bots standing still), no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); bots on Expert |
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
-| 1v1 duels | a lobby on Workshop aim maps: endless warmup where everyone can `!duel` each other. No ready-up or match commands. |
+| 1v1 duels | a lobby on Workshop aim maps: one endless respawn round (no warmup) where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
 | Retakes | bomb planted on a random site every round, CTs retake it. Standard retakes allocator: `!guns` picks the CT rifle (M4A4 / M4A1-S / AUG), the T rifle (AK-47 / SG 553) and whether you want the AWP (one per team). Every round is a full buy with armour, a random grenade and kits; `!loadout` pistol picks and skins still apply. Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
+
+**No warmup in any mode.** 5v5 / wingman before `!ready` and the 1v1 lobby use a normal endless round with respawns instead (no WARMUP timer); every other mode starts straight away.
 
 In every mode there's no team-select screen after a map loads: players are put on the smaller team automatically, and **M** still opens the menu to switch (`match_skip_team_menu 0` to turn this off).
 
@@ -166,13 +168,13 @@ A map in a mode's own folder always counts for that mode. The map menus only lis
 Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
 ### Rock the vote: `!rtv`
-Type `!rtv` (or just `rtv`). When 60% of players have (`match_rtv_ratio`), everyone votes between up to 6 maps of the current mode and "Stay"; the winner loads in the same mode. Works in every mode, but **never during a live 5v5 or wingman match** (knife round and side pick included) or a best of 3. Warmup is fine. Opens 30 s after a map loads; after a "stay" result the next vote can start 3 minutes later. `match_rtv_enabled 0` turns it off.
+Type `!rtv` (or just `rtv`). When 60% of players have (`match_rtv_ratio`), everyone votes between up to 6 maps of the current mode and "Stay"; the winner loads in the same mode. Works in every mode, but **never during a live 5v5 or wingman match** (knife round and side pick included) or a best of 3. Before `!ready` is fine. Opens 30 s after a map loads; after a "stay" result the next vote can start 3 minutes later. `match_rtv_enabled 0` turns it off.
 
 ### Rock the gamemode: `!rtg`
 Type `!rtg` (or `rock the gamemode`). Same 60% and same rules as `!rtv`. Two votes follow: first the game mode (every other mode that has a map to play, up to 8, plus "Stay"), then the map, **only maps made for the winning mode** (plus "Keep <current map>" if it suits). The server then switches like `!gamemode` does.
 
 ### Match flow
-Warmup → `!ready` → (map vote if best of 3) → knife round → winners `!stay` / `!switch` / `!t` / `!ct` → **LIVE**
+Waiting round (no warmup: respawns, no bomb, never ends) → `!ready` → (map vote if best of 3) → knife round → winners `!stay` / `!switch` / `!t` / `!ct` → **LIVE**
 
 | Players | Admins |
 |---|---|

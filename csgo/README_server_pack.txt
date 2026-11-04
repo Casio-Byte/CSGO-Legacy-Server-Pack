@@ -368,8 +368,8 @@ Game modes (admins)
 
   The chosen mode stays across map changes. Restarting the server goes back
   to the default game mode and first map picked in start_server.bat setup.
-  In Casual, Deathmatch, Arms Race and Demolition the game runs its own
-  rules; the ready-up commands only apply in Competitive and Wingman.
+  In Casual, Arms Race and Demolition the game runs its own rules (minus
+  warmup); the ready-up commands only apply in Competitive and Wingman.
   Deathmatch is free-for-all (everyone against everyone, random spawns),
   with no bonus weapon rounds. It runs on Casual with the plugin's own
   rules (instant respawn with 2 s spawn protection, armour + helmet, one
@@ -386,9 +386,15 @@ Game modes (admins)
   Every mode: no team-select screen after a map loads - players are put
   on the smaller team automatically (M still opens the menu to switch).
   Turn off with match_skip_team_menu 0.
+  No warmup in any mode. Where you used to wait in warmup (5v5 / wingman
+  before !ready, the 1v1 duel lobby) there's a normal round instead with
+  instant respawns, no bomb and buying any time in the buy zone - it just
+  never ends and has no WARMUP timer. The knife round / live match /
+  duel resets those rules. Casual, Arms Race, Demolition, Deathmatch,
+  Arenas, Practice and Retakes start straight away.
 
 Match - players
-  !ready  (!r)          mark yourself ready in warmup
+  !ready  (!r)          mark yourself ready (before the match)
   !unready  (!ur)       undo ready
   !pause                tactical pause (starts at next freezetime)
   !tech                 technical pause
@@ -448,7 +454,7 @@ Match - practice mode
   !1v1 <name>           same as !duel <name>
 
 1v1 duels (server mode, set with !1v1 or !gamemode)
-  A lobby on the aim maps: endless warmup (respawn, buy anywhere) where
+  A lobby on the aim maps: one endless round (respawn, buy any time) where
   everyone warms up and challenges each other with !duel. No ready-up,
   knife round, pauses or match commands. While a duel runs, the other
   players spectate; afterwards everyone is back in the lobby.
@@ -597,7 +603,8 @@ have (match_rtv_ratio), everyone votes between up to 6 maps of the
 current mode (installed and suited to it) and "Stay". The winner loads in
 5 seconds, in the same mode. !unrtv takes your vote back.
   - works in every mode, but never during a live 5v5 or wingman match
-    (knife round and side pick included) or a best of 3. Warmup is fine.
+    (knife round and side pick included) or a best of 3. Before !ready
+    is fine.
   - opens 30 seconds after a map loads; after a vote that stays, the
     next one can start 3 minutes later.
 

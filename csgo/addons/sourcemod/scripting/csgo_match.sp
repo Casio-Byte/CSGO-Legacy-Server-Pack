@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.20.0-20261104"
+#define PLUGIN_VERSION "1.21.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -240,7 +240,8 @@ float g_RtvAllowedAt = 0.0;   // engine time
 char  g_RtvTarget[PLATFORM_MAX_PATH];
 ConVar g_cvDmLoadout;
 StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
-bool g_DmNoBuy = false;   // Deathmatch fixed loadout is on (checked every frame, so cached)
+bool g_DmNoBuy = false;
+bool g_PrematchOn = false; // the no-warmup "waiting for !ready" / duel lobby round is set up   // Deathmatch fixed loadout is on (checked every frame, so cached)
 bool g_BootModeDone = false;
 
 // Commands registered as sm_<name> so "!name" works too. ".name" works for everything in Dispatch().
@@ -281,9 +282,9 @@ char g_CfgWarmup[][] =
 	"mp_give_player_c4 1",
 	"mp_maxmoney 16000",
 	"mp_startmoney 16000",
-	"mp_do_warmup_period 1",
-	"mp_warmuptime 9999",
-	"mp_warmup_pausetimer 1",
+	"mp_do_warmup_period 0",
+	"mp_warmuptime 0",
+	"mp_warmup_pausetimer 0",
 	"mp_autokick 0",
 	"mp_autoteambalance 0",
 	"mp_limitteams 0",
@@ -919,9 +920,10 @@ void StartWarmup()
 	ServerCommand("mp_match_end_changelevel 0");
 	ServerCommand("mp_match_end_restart 0");
 	ServerCommand("mp_unpause_match");
-	ServerCommand("mp_warmup_start");
+	// No game warmup in any mode: a normal round with respawns instead.
+	CreateTimer(0.2, Timer_PrematchOn, _, TIMER_FLAG_NO_MAPCHANGE);
 
-	Announce("Warmup. Type \x04!ready\x01 when you're ready. \x04!help\x01 lists commands.");
+	Announce("Waiting for players. Type \x04!ready\x01 when you're ready. \x04!help\x01 lists commands.");
 }
 
 void StartMatch()
@@ -940,6 +942,7 @@ void StartMatch()
 
 void StartKnife()
 {
+	EndPrematch();
 	g_State = State_Knife;
 	g_KnifeActive = false;
 
@@ -953,6 +956,7 @@ void StartKnife()
 
 void StartLive()
 {
+	EndPrematch();
 	g_State = State_Live;
 	g_Paused = false;
 	for (int t = 0; t < 4; t++)
@@ -1067,7 +1071,7 @@ void Cmd_Ready(int client, bool ready)
 		}
 		else
 		{
-			Reply(client, "Ready status only matters during warmup.");
+			Reply(client, "Ready status only matters before the match starts.");
 		}
 		return;
 	}
@@ -1427,7 +1431,7 @@ void Cmd_ForceStart(int client)
 		return;
 	if (g_State != State_Warmup)
 	{
-		Reply(client, "The match can only be force-started from warmup.");
+		Reply(client, "The match can only be force-started before it begins.");
 		return;
 	}
 	Announce("%N force-started the match.", client);
@@ -1438,7 +1442,7 @@ void Cmd_Restart(int client)
 {
 	if (!RequireAdmin(client))
 		return;
-	Announce("%N reset the match — back to warmup.", client);
+	Announce("%N reset the match — back to waiting for \x04!ready\x01.", client);
 	StartWarmup();
 }
 
@@ -1448,7 +1452,7 @@ void Cmd_Knife(int client)
 		return;
 	if (g_State != State_Warmup)
 	{
-		Reply(client, "Change the knife setting during warmup.");
+		Reply(client, "Change the knife setting before the match starts.");
 		return;
 	}
 	g_KnifeEnabled = !g_KnifeEnabled;
@@ -1464,7 +1468,7 @@ void Cmd_ForceReady(int client)
 		return;
 	if (g_State != State_Warmup)
 	{
-		Reply(client, "Only available during warmup.");
+		Reply(client, "Only available before the match starts.");
 		return;
 	}
 	for (int i = 1; i <= MaxClients; i++)
@@ -1575,6 +1579,7 @@ void Cmd_Prac(int client)
 
 void EnterPractice()
 {
+	EndPrematch();
 	ResetMatch();
 	StopDemo();
 	g_State = State_Practice;
@@ -1886,7 +1891,7 @@ public Action Timer_RecoverWarmup(Handle timer)
 {
 	if (g_State == State_Live || g_State == State_Duel || g_State == State_Arena || g_State == State_Practice)
 		return Plugin_Stop;
-	Announce("The game tried to end the match before it started — back to warmup.");
+	Announce("The game tried to end the match before it started — back to waiting for \x04!ready\x01.");
 	ServerCommand("mp_restartgame 1");
 	StartWarmup();
 	return Plugin_Stop;
@@ -1921,7 +1926,7 @@ bool CanStartDuel(int client)
 	}
 	if (g_State == State_Live || g_State == State_Knife || g_State == State_SideSelect)
 	{
-		Reply(client, "A match is running. Duels can only start in warmup.");
+		Reply(client, "A match is running. Duels can only start before it begins.");
 		return false;
 	}
 	if (g_State == State_Arena)
@@ -2268,6 +2273,7 @@ void Cmd_DuelAnswer(int client, bool accept)
 
 void StartDuel(int a, int b, int weapon, int target, bool hs)
 {
+	EndPrematch();
 	ResetMatch();
 	StopDemo();
 	g_State = State_Duel;
@@ -2674,7 +2680,7 @@ void EndDuel(const char[] reason)
 	if (IsMatchMode())
 	{
 		StartWarmup(); // runs DuelCleanup()
-		Announce("Back to warmup. Spectators can join a team again.");
+		Announce("Back to waiting for \x04!ready\x01. Spectators can join a team again.");
 	}
 	else
 	{
@@ -3103,6 +3109,56 @@ void DmApply()
 void DmRestore()
 {
 	g_DmNoBuy = false;
+	g_PrematchOn = false;
+	TempCvarsRestore();
+}
+
+/* ---------- No warmup: the waiting-for-!ready / duel lobby round ---------- */
+
+// Like warmup without the game's warmup: respawn on death, the round never
+// ends, buy any time in the buy zone, no bomb. Undone (TempCvarsRestore) at
+// the knife round, live match, a duel, practice, arenas or a map change.
+char g_PrematchCvars[][][] =
+{
+	{ "mp_do_warmup_period", "0" },
+	{ "mp_warmuptime", "0" },
+	{ "mp_warmup_pausetimer", "0" },
+	{ "mp_respawn_on_death_t", "1" },
+	{ "mp_respawn_on_death_ct", "1" },
+	{ "mp_respawn_immunitytime", "0" },
+	{ "mp_ignore_round_win_conditions", "1" },
+	{ "mp_roundtime", "60" },
+	{ "mp_roundtime_defuse", "60" },
+	{ "mp_roundtime_hostage", "60" },
+	{ "mp_freezetime", "0" },
+	{ "mp_buytime", "9999" },
+	{ "mp_give_player_c4", "0" }
+};
+
+public Action Timer_PrematchOn(Handle timer)
+{
+	if (g_State != State_Warmup && !(g_State == State_None && CurrentMode() == GM_1v1Match))
+		return Plugin_Stop;
+	for (int i = 0; i < sizeof(g_PrematchCvars); i++)
+		DmSetCvar(g_PrematchCvars[i][0], g_PrematchCvars[i][1]);
+	g_PrematchOn = true;
+	ServerCommand("mp_warmup_end");
+	ServerCommand("mp_restartgame 1");
+	return Plugin_Stop;
+}
+
+void EndPrematch()
+{
+	if (!g_PrematchOn)
+		return;
+	g_PrematchOn = false;
+	TempCvarsRestore();
+}
+
+// Puts back cvars changed through DmSetCvar (Deathmatch or the no-warmup round):
+// game defaults, then the mode's own game mode cfg and server.cfg, like a map load.
+void TempCvarsRestore()
+{
 	if (g_DmSaved == null || g_DmSaved.Size == 0)
 		return;
 	StringMapSnapshot snap = g_DmSaved.Snapshot();
@@ -3135,6 +3191,9 @@ void DmRestore()
 	// Same order as a map load: server.cfg after the game mode cfg (bot difficulty etc.).
 	if (FileExists("cfg/server.cfg", true))
 		ServerCommand("exec server.cfg");
+	// The game mode cfgs turn warmup on; this pack never uses the game's warmup.
+	ServerCommand("mp_do_warmup_period 0");
+	ServerCommand("mp_warmuptime 0");
 }
 
 int GetBotCount()
@@ -3221,8 +3280,8 @@ void ApplyModeOnMapStart()
 	SeriesOnMapStart();
 	SetRetakesPlugin(g_RetakesNext);
 	RtvOnMapStart();
-	if (!DmActive())
-		DmRestore();
+	if (!DmActive() || g_PrematchOn)
+		DmRestore(); // also ends the no-warmup round from the last map
 	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_PracticeNext)
 	{
@@ -3255,8 +3314,11 @@ void ApplyModeOnMapStart()
 		return;
 	}
 
-	// Casual / Deathmatch / Arms Race / Demolition: let the game run its own mode.
+	// Casual / Arms Race / Demolition: let the game run its own mode, minus warmup.
 	// When a game ends, restart it on the same map instead of a map vote.
+	ServerCommand("mp_do_warmup_period 0");
+	ServerCommand("mp_warmuptime 0");
+	ServerCommand("mp_warmup_end");
 	ServerCommand("mp_endmatch_votenextmap 0");
 	ServerCommand("mp_match_end_changelevel 0");
 	ServerCommand("mp_match_end_restart 1");
@@ -4880,6 +4942,7 @@ void FindArenas()
 
 void EnterArena()
 {
+	EndPrematch();
 	DuelCleanup();
 	ResetMatch();
 	StopDemo();
@@ -7010,7 +7073,7 @@ void Cmd_EndSeries(int client)
 	bool wasVeto = g_VetoRunning;
 	CancelSeries(msg);
 	if (wasVeto && g_State == State_Warmup)
-		Announce("Back to warmup. \x04!ready\x01 starts a new map vote — or an admin can type \x04!bo1\x01 for a single map.");
+		Announce("Back to waiting for players. \x04!ready\x01 starts a new map vote — or an admin can type \x04!bo1\x01 for a single map.");
 }
 
 
@@ -7167,7 +7230,7 @@ void EnterDuelLobby()
 	ServerCommand("mp_timelimit 0");
 	ServerCommand("mp_endmatch_votenextmap 0");
 	ServerCommand("mp_unpause_match");
-	ServerCommand("mp_warmup_start");
+	CreateTimer(0.2, Timer_PrematchOn, _, TIMER_FLAG_NO_MAPCHANGE); // no game warmup
 	CreateTimer(5.0, Timer_DuelLobbyAnnounce, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
