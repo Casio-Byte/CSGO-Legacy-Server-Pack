@@ -21,7 +21,7 @@ bool g_PluginTeamSwitch[MAXPLAYERS+1]; // only used by a stock in generic.sp
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PACK_VERSION "1.4.0-20261104"
+#define PACK_VERSION "1.4.1-20261104"
 
 enum RoundType
 {
@@ -116,6 +116,9 @@ public void OnPluginStart()
     HookEvent("player_death", Event_PlayerDeath);
     HookEvent("round_start", Event_RoundStart);
     HookEvent("round_prestart", Event_RoundPreStart);
+    ConVar ignoreWin = FindConVar("mp_ignore_round_win_conditions");
+    if (ignoreWin != null)
+        ignoreWin.AddChangeHook(OnIgnoreWinChanged);
 
     for (int i = 1; i <= MaxClients; i++)
     {
@@ -481,13 +484,28 @@ int JoinedHumans()
 
 void UpdateSolo()
 {
-    bool solo = JoinedHumans() < 2;
-    if (solo == g_Solo)
-        return;
-    g_Solo = solo;
-    SetCvarInt("mp_ignore_round_win_conditions", solo ? 1 : 0);
-    SetCvarInt("mp_respawn_on_death_t", solo ? 1 : 0);
-    SetCvarInt("mp_respawn_on_death_ct", solo ? 1 : 0);
+    // Applied every round, not only when it changes: retakes re-runs its
+    // retakes_game.cfg when it switches on at a map start, which sets these
+    // back to 0 - and with one team empty the game then ends every round the
+    // moment it starts (the loop).
+    g_Solo = JoinedHumans() < 2;
+    SetCvarInt("mp_ignore_round_win_conditions", g_Solo ? 1 : 0);
+    SetCvarInt("mp_respawn_on_death_t", g_Solo ? 1 : 0);
+    SetCvarInt("mp_respawn_on_death_ct", g_Solo ? 1 : 0);
+}
+
+// Alone on the server: something switching round wins back on mid-round
+// (a config being run again) would end the round at once - switch it back.
+public void OnIgnoreWinChanged(ConVar cv, const char[] oldValue, const char[] newValue)
+{
+    if (g_Solo && StringToInt(newValue) == 0 && Retakes_Enabled() && JoinedHumans() < 2)
+        RequestFrame(Frame_KeepSolo);
+}
+
+public void Frame_KeepSolo(any data)
+{
+    if (g_Solo && Retakes_Enabled())
+        SetCvarInt("mp_ignore_round_win_conditions", 1);
 }
 
 public void OnMapStart()
