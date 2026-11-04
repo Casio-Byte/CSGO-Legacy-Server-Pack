@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.24.0-20261104"
+#define PLUGIN_VERSION "1.24.1-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -3212,6 +3212,10 @@ void TempCvarsRestore()
 // order a map load does, then keeps warmup off.
 void ExecModeConfigs()
 {
+	// The game mode cfgs turn warmup on; this pack never uses the game's warmup.
+	// (Queued again at the end, after those cfgs.)
+	ServerCommand("mp_do_warmup_period 0");
+	ServerCommand("mp_warmuptime 0");
 	char gm[32];
 	int type = GetCvarInt("game_type"), mode = GetCvarInt("game_mode");
 	if (type == 0 && mode == 0)      strcopy(gm, sizeof(gm), "casual");
@@ -4688,13 +4692,14 @@ void PlayableMapPath(const char[] map, char[] out, int maxlen)
 		}
 		Format(src, sizeof(src), "maps/%s.nav", map);
 		Format(dst, sizeof(dst), "maps/%s.nav", name);
-		if (FileExists(src, true) && !FileExists(dst, true))
-			CopyGameFile(src, dst);
+		bool nav = FileExists(src, true) && !FileExists(dst, true) && CopyGameFile(src, dst);
+		// Listed so uninstall_server_pack.bat removes the copies (only what was copied).
 		File log = OpenFile("maps/modes/copied_to_maps.txt", "a");
 		if (log != null)
 		{
 			log.WriteLine("%s.bsp", name);
-			log.WriteLine("%s.nav", name);
+			if (nav)
+				log.WriteLine("%s.nav", name);
 			delete log;
 		}
 		LogMessage("Copied %s into maps\\ so the game can load it.", map);
@@ -5995,6 +6000,25 @@ ArrayList BuildMapList()
 		Format(dir, sizeof(dir), "maps/modes/%s", g_GmFolder[i]);
 		Format(prefix, sizeof(prefix), "modes/%s/", g_GmFolder[i]);
 		ScanMapDir(list, seen, dir, prefix, i);
+	}
+	// Community maps the downloader put in csgo/maps (1v1, arenas): under
+	// their mode too, from the mode's maplist.txt. Official maps stay under
+	// csgo\maps (they're in several modes' lists).
+	for (int i = 0; i < GM_COUNT; i++)
+	{
+		if (i != GM_1v1Match && i != GM_Arena)
+			continue;
+		ArrayList names = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+		ReadModeMapList(i, names);
+		char name[PLATFORM_MAX_PATH], file[PLATFORM_MAX_PATH];
+		for (int j = 0; j < names.Length; j++)
+		{
+			names.GetString(j, name, sizeof(name));
+			Format(file, sizeof(file), "maps/%s.bsp", name);
+			if (FileExists(file, true))
+				AddMapEntry(list, seen, name, name, i);
+		}
+		delete names;
 	}
 	ScanMapDir(list, seen, "maps", "", MAPCAT_ROOT);
 
