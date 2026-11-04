@@ -147,10 +147,10 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Wingman 2v2 | ready-up, `wingman.cfg` |
 | Casual / Arms Race / Demolition | the game's own rules |
 | Deathmatch | **free-for-all**, built on Casual (instant respawn, 2 s spawn protection, one endless round; the game's own DM mode left bots standing still), no bonus weapons; everyone, bots included, can only hold knife, AK-47 and Deagle (other guns are refused or removed), no buy menu (`match_dm_loadout`); bots on Expert |
-| Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
+| Practice | grenade trajectories, impacts, infinite ammo, `!spawn` `!clear` `!god`. All of it (and `sv_cheats`) is reset when any other mode starts. |
 | 1v1 duels | a lobby on Workshop aim maps: one endless respawn round (no warmup) where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
-| Retakes | bomb **insta planted** on a random site as the round starts, CTs retake it. First 5 rounds are **pistol rounds**, then each round is a random **eco**, **half buy** or **full buy** (15/25/60%). `!guns` picks your gun for each round type (CT and T) and the AWP on full buys. **Insta defuse** once every T is dead (or the bomb goes off at once if there isn't time). Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
+| Retakes | bomb **insta planted** on a random site as the round starts, CTs retake it. First 5 rounds are **pistol rounds**, then each round is a random **eco**, **half buy** or **full buy** (15/25/60%). `!guns` picks your gun for each round type (CT and T) and the AWP on full buys. **Insta defuse** once every T is dead and none of their fire/grenades can still hit the defuser (or the bomb goes off at once if there isn't time); chat says why when it can't happen yet. Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
 
 **No warmup in any mode.** 5v5 / wingman before `!ready` and the 1v1 lobby use a normal endless round with respawns instead (no WARMUP timer); every other mode starts straight away.
 

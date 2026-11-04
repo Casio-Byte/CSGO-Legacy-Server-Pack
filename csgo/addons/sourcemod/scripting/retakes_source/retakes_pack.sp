@@ -21,7 +21,7 @@ bool g_PluginTeamSwitch[MAXPLAYERS+1]; // only used by a stock in generic.sp
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PACK_VERSION "1.0.0-20261104"
+#define PACK_VERSION "1.1.0-20261104"
 
 enum RoundType
 {
@@ -76,6 +76,8 @@ ConVar g_cvInstaDefuse;
 
 RoundType g_RoundType = Round_Pistol;
 bool g_DefuseHandled = false;
+bool g_ThreatWarned = false;
+Handle g_DefuseWatch = null;  // re-checks while a defuse runs (e.g. fire burns out)  // said once per round why a fire/grenade blocks it
 
 public Plugin myinfo =
 {
@@ -438,6 +440,7 @@ public Action Timer_AnnounceRound(Handle timer)
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
     g_DefuseHandled = false;
+    g_ThreatWarned = false;
 }
 
 public void Event_FreezeEnd(Event event, const char[] name, bool dontBroadcast)
@@ -509,18 +512,44 @@ public Action Timer_InstaPlant(Handle timer)
 
 public void Event_BeginDefuse(Event event, const char[] name, bool dontBroadcast)
 {
-    if (!g_cvInstaDefuse.BoolValue)
+    if (!Retakes_Enabled())
         return;
+    if (!g_cvInstaDefuse.BoolValue)
+    {
+        Retakes_MessageToAll("Insta defuse is turned off on this server (sm_retakes_instadefuse 0).");
+        return;
+    }
     // The game sets the defuse countdown after this event: act a moment later.
-    CreateTimer(0.1, Timer_CheckDefuse, _, TIMER_FLAG_NO_MAPCHANGE);
+    // 1 = say in chat why it doesn't happen.
+    CreateTimer(0.1, Timer_CheckDefuse, 1, TIMER_FLAG_NO_MAPCHANGE);
+    if (g_DefuseWatch == null)
+        g_DefuseWatch = CreateTimer(0.5, Timer_DefuseWatch, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+}
+
+public Action Timer_DefuseWatch(Handle timer)
+{
+    int bomb = FindEntityByClassname(-1, "planted_c4");
+    int defuser = bomb != -1 ? GetEntPropEnt(bomb, Prop_Send, "m_hBombDefuser") : -1;
+    if (g_DefuseHandled || bomb == -1 || defuser <= 0)
+    {
+        g_DefuseWatch = null;
+        return Plugin_Stop;
+    }
+    Timer_CheckDefuse(null, 0);
+    return Plugin_Continue;
+}
+
+public void OnMapEnd()
+{
+    g_DefuseWatch = null; // TIMER_FLAG_NO_MAPCHANGE kills it
 }
 
 public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
-    if (!g_cvInstaDefuse.BoolValue)
+    if (!g_cvInstaDefuse.BoolValue || !Retakes_Enabled())
         return;
-    // The last T just died while a CT was already defusing.
-    CreateTimer(0.1, Timer_CheckDefuse, _, TIMER_FLAG_NO_MAPCHANGE);
+    // The last T just died while a CT was already defusing (quiet re-check).
+    CreateTimer(0.1, Timer_CheckDefuse, 0, TIMER_FLAG_NO_MAPCHANGE);
 }
 
 int AliveCount(int team)
@@ -534,30 +563,86 @@ int AliveCount(int team)
     return n;
 }
 
-// Fire or a grenade still in the air could still kill the defuser.
-bool ThreatLeft()
+// Is this fire / grenade a T's? (Friendly fire is off in retakes, so a CT's
+// own molotov or HE can't hurt the defuser.)
+bool ThrownByT(int ent, const char[] prop)
 {
-    char threats[][] = { "inferno", "molotov_projectile", "hegrenade_projectile" };
-    for (int i = 0; i < sizeof(threats); i++)
+    if (!HasEntProp(ent, Prop_Send, prop))
+        return true;
+    int owner = GetEntPropEnt(ent, Prop_Send, prop);
+    if (owner <= 0 || owner > MaxClients || !IsClientInGame(owner))
+        return true; // owner left: can't tell, play safe
+    return GetClientTeam(owner) == CS_TEAM_T;
+}
+
+// A T's fire near the bomb, or a T's grenade still in the air, could still
+// kill the defuser. Says which in what[].
+bool ThreatLeft(int bomb, char[] what, int maxlen)
+{
+    float bombPos[3], pos[3];
+    GetEntPropVector(bomb, Prop_Send, "m_vecOrigin", bombPos);
+    int ent = -1;
+    while ((ent = FindEntityByClassname(ent, "inferno")) != -1)
     {
-        if (FindEntityByClassname(-1, threats[i]) != -1)
+        GetEntPropVector(ent, Prop_Send, "m_vecOrigin", pos);
+        if (GetVectorDistance(pos, bombPos) <= 450.0 && ThrownByT(ent, "m_hOwnerEntity"))
+        {
+            strcopy(what, maxlen, "a T's molotov is still burning near the bomb");
             return true;
+        }
+    }
+    char projectiles[][] = { "molotov_projectile", "hegrenade_projectile" };
+    for (int i = 0; i < sizeof(projectiles); i++)
+    {
+        ent = -1;
+        while ((ent = FindEntityByClassname(ent, projectiles[i])) != -1)
+        {
+            if (ThrownByT(ent, "m_hThrower"))
+            {
+                strcopy(what, maxlen, i == 0 ? "a T's molotov is still in the air" : "a T's grenade is still in the air");
+                return true;
+            }
+        }
     }
     return false;
 }
 
-public Action Timer_CheckDefuse(Handle timer)
+public Action Timer_CheckDefuse(Handle timer, any explain)
 {
-    if (g_DefuseHandled || !Retakes_Live())
+    if (g_DefuseHandled)
         return Plugin_Stop;
+    if (!Retakes_Live())
+    {
+        if (explain)
+            Retakes_MessageToAll("No insta defuse: it only works in live retake rounds (not in warmup or the spawn editor).");
+        return Plugin_Stop;
+    }
     int bomb = FindEntityByClassname(-1, "planted_c4");
     if (bomb == -1 || !GetEntProp(bomb, Prop_Send, "m_bBombTicking"))
+    {
+        if (explain)
+            Retakes_MessageToAll("No insta defuse: couldn't find a ticking bomb.");
         return Plugin_Stop;
+    }
     int defuser = GetEntPropEnt(bomb, Prop_Send, "m_hBombDefuser");
     if (defuser <= 0 || defuser > MaxClients || !IsClientInGame(defuser) || !IsPlayerAlive(defuser))
+        return Plugin_Stop; // stopped defusing already
+    int ts = AliveCount(CS_TEAM_T);
+    if (ts > 0)
+    {
+        if (explain)
+            Retakes_MessageToAll("No insta defuse yet: {LIGHT_RED}%d T%s still alive{NORMAL}. It happens as soon as the last one dies.", ts, ts == 1 ? " is" : "s are");
         return Plugin_Stop;
-    if (AliveCount(CS_TEAM_T) > 0 || ThreatLeft())
+    }
+    char what[64];
+    if (ThreatLeft(bomb, what, sizeof(what)))
+    {
+        // All Ts are dead here: say it even on the quiet re-check, once a round.
+        if (explain || !g_ThreatWarned)
+            Retakes_MessageToAll("No insta defuse: %s - defusing normally.", what);
+        g_ThreatWarned = true;
         return Plugin_Stop;
+    }
 
     float left = GetEntPropFloat(bomb, Prop_Send, "m_flC4Blow") - GetGameTime();
     float need = GetEntProp(defuser, Prop_Send, "m_bHasDefuser") ? 5.0 : 10.0;

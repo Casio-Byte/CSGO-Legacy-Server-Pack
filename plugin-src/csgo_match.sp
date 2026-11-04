@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.22.0-20261104"
+#define PLUGIN_VERSION "1.23.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -241,7 +241,8 @@ char  g_RtvTarget[PLATFORM_MAX_PATH];
 ConVar g_cvDmLoadout;
 StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
 bool g_DmNoBuy = false;
-bool g_PrematchOn = false; // the no-warmup "waiting for !ready" / duel lobby round is set up   // Deathmatch fixed loadout is on (checked every frame, so cached)
+bool g_PrematchOn = false;
+bool g_PracCleanup = false; // practice settings (sv_cheats, impacts...) need undoing when it ends // the no-warmup "waiting for !ready" / duel lobby round is set up   // Deathmatch fixed loadout is on (checked every frame, so cached)
 bool g_BootModeDone = false;
 
 // Commands registered as sm_<name> so "!name" works too. ".name" works for everything in Dispatch().
@@ -907,6 +908,7 @@ void ResetMatch()
 
 void StartWarmup()
 {
+	PracticeCleanup();
 	DuelCleanup();
 	ResetMatch();
 	StopDemo();
@@ -1580,6 +1582,7 @@ void Cmd_Prac(int client)
 void EnterPractice()
 {
 	EndPrematch();
+	g_PracCleanup = true;
 	ResetMatch();
 	StopDemo();
 	g_State = State_Practice;
@@ -3155,6 +3158,35 @@ void EndPrematch()
 	TempCvarsRestore();
 }
 
+/* Practice turns on cheats, impacts / hit markers, grenade trajectories,
+   infinite ammo, free money and respawns (prac.cfg). None of that may leak
+   into another mode: back to the game's defaults, then the mode's configs. */
+char g_PracticeCvars[][] =
+{
+	"sv_cheats", "sv_infinite_ammo", "sv_showimpacts", "sv_showimpacts_time",
+	"sv_showbullethits", "sv_grenade_trajectory", "sv_grenade_trajectory_time",
+	"sv_grenade_trajectory_thickness", "ammo_grenade_limit_total",
+	"mp_buy_anywhere", "mp_buytime", "mp_maxmoney", "mp_startmoney",
+	"mp_freezetime", "mp_roundtime", "mp_roundtime_defuse", "mp_roundtime_hostage",
+	"mp_respawn_on_death_ct", "mp_respawn_on_death_t", "mp_friendlyfire",
+	"mp_ct_default_secondary", "mp_t_default_secondary", "mp_give_player_c4"
+};
+
+void PracticeCleanup()
+{
+	if (!g_PracCleanup)
+		return;
+	g_PracCleanup = false;
+	for (int i = 0; i < sizeof(g_PracticeCvars); i++)
+	{
+		ConVar cv = FindConVar(g_PracticeCvars[i]);
+		if (cv != null)
+			cv.RestoreDefault();
+	}
+	ExecModeConfigs();
+	LogMessage("Practice settings reset (cheats, impacts, trajectories, infinite ammo...).");
+}
+
 // Puts back cvars changed through DmSetCvar (Deathmatch or the no-warmup round):
 // game defaults, then the mode's own game mode cfg and server.cfg, like a map load.
 void TempCvarsRestore()
@@ -3173,6 +3205,13 @@ void TempCvarsRestore()
 	delete snap;
 	g_DmSaved.Clear();
 
+	ExecModeConfigs();
+}
+
+// Runs the current mode's own game mode cfg and server.cfg again, in the
+// order a map load does, then keeps warmup off.
+void ExecModeConfigs()
+{
 	char gm[32];
 	int type = GetCvarInt("game_type"), mode = GetCvarInt("game_mode");
 	if (type == 0 && mode == 0)      strcopy(gm, sizeof(gm), "casual");
@@ -3282,6 +3321,8 @@ void ApplyModeOnMapStart()
 	RtvOnMapStart();
 	if (!DmActive() || g_PrematchOn)
 		DmRestore(); // also ends the no-warmup round from the last map
+	if (!g_PracticeNext)
+		PracticeCleanup();
 	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_PracticeNext)
 	{

@@ -424,7 +424,9 @@ Match - admins
   !team2 <name>         set team 2 name
   !readyrequired <n>    players needed to start (0 = everyone)
   !restore <n>          load round backup <n>
-  !prac / !exitprac     practice mode on/off
+  !prac / !exitprac     practice mode on/off (its cheats, impacts / hit
+                        markers, trajectories, infinite ammo and free money
+                        are reset as soon as any other mode starts)
 
 Best of 3 (Competitive 5v5)
   Turn it on with !bo3 or in !options ("5v5 series"). !bo1 goes back to
@@ -604,10 +606,14 @@ round is a random eco (15%), half buy (25%) or full buy (60%):
   CTs always get a defuse kit. Skins from !ws still apply.
 
 Insta plant: the bomb is planted the moment the round starts.
-Insta defuse: once every T is dead (and no fire or grenade can still hit
-the defuser), a defuse finishes straight away if there's enough time on
-the bomb (5 s with a kit, 10 s without). If there isn't, the bomb goes off
-straight away instead of making everyone wait.
+Insta defuse: once every T is dead (and none of the Ts' fire near the bomb
+or grenades in the air can still hit the defuser - the CTs' own can't, as
+friendly fire is off), a defuse finishes straight away if there's enough
+time on the bomb (5 s with a kit, 10 s without). If there isn't, the bomb
+goes off straight away instead of making everyone wait. When a defuse
+starts and insta defuse can't happen yet, the chat says why (e.g. "2 Ts
+are still alive", "a T's molotov is still burning near the bomb"); it
+kicks in as soon as the reason is gone, even mid-defuse.
 Settings (cfg\sourcemod\retakes\retakes_pack.cfg, made on first start):
   sm_retakes_pistol_rounds 5, sm_retakes_eco_chance 15,
   sm_retakes_halfbuy_chance 25, sm_retakes_fullbuy_chance 60,
