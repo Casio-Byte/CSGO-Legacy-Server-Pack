@@ -34,7 +34,8 @@ A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on 
 | **csgo_loadout.smx** | custom | Skins and loadouts (below) |
 | nolobbyreservation.smx | from FNScence repo | Stops "lobby only" reservations that drop internet players right after connecting |
 | eItems + eSprays | from FNScence repo | `!spray` graffiti. About 140 MB of spray images in `csgo/materials/decals/eitems`. |
-| retakes + retakes_standardallocator | 0.3.4 (splewis) | Retakes mode with `!guns` loadouts. Only runs while Retakes mode is on. |
+| retakes | 0.3.4 (splewis) | Retakes mode. Only runs while Retakes mode is on. |
+| **retakes_pack.smx** | custom | Retakes round types (pistol / eco / half buy / full buy) with `!guns` picks, insta plant, insta defuse. Replaces the standard allocator. |
 | pugsetup, weapons, gloves | from FNScence repo | **Disabled** (`plugins/disabled`) because they clash with CS:GO Match and CS:GO Loadout |
 
 ---
@@ -149,7 +150,7 @@ Pick a mode, then a map. The server switches 5 seconds later, and the mode survi
 | Practice | grenade trajectories, infinite ammo, `!spawn` `!clear` `!god` |
 | 1v1 duels | a lobby on Workshop aim maps: one endless respawn round (no warmup) where everyone can `!duel` each other. No ready-up or match commands. |
 | Multi-1v1 arenas | many 1v1s at once on one `am_` map. Players are shuffled into new pairs every round (or a ladder). `!duel` pairs get their own arena. |
-| Retakes | bomb planted on a random site every round, CTs retake it. Standard retakes allocator: `!guns` picks the CT rifle (M4A4 / M4A1-S / AUG), the T rifle (AK-47 / SG 553) and whether you want the AWP (one per team). Every round is a full buy with armour, a random grenade and kits; `!loadout` pistol picks and skins still apply. Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
+| Retakes | bomb **insta planted** on a random site as the round starts, CTs retake it. First 5 rounds are **pistol rounds**, then each round is a random **eco**, **half buy** or **full buy** (15/25/60%). `!guns` picks your gun for each round type (CT and T) and the AWP on full buys. **Insta defuse** once every T is dead (or the bomb goes off at once if there isn't time). Spawns included for 24 maps; admins add more with `!edit`. No warmup. |
 
 **No warmup in any mode.** 5v5 / wingman before `!ready` and the 1v1 lobby use a normal endless round with respawns instead (no WARMUP timer); every other mode starts straight away.
 
@@ -289,5 +290,5 @@ Compiled `.smx` files are already in `csgo/addons/sourcemod/plugins/`.
 - SourceMod, Metamod:Source (AlliedModders), Source Scramble (nosoop) and PTaH (komashchenko).
 - Skin and glove handling follows kgns' *Weapons & Knives* and *Gloves*. The sticker method and gamedata come from quasemago's *CS:GO Weapon Stickers* (GPLv3).
 - [FNScence/CSGO-Legacy-Server](https://github.com/FNScence/CSGO-Legacy-Server): SteamFix (by E0n3x), NoLobbyReservation, eItems/eSprays, pugsetup, ESL configs.
-- Retakes: [splewis/csgo-retakes](https://github.com/splewis/csgo-retakes) 0.3.4 with the standard allocator (GPLv3). Source in `csgo/addons/sourcemod/scripting/retakes_source/`. It's patched to start switched off (the match plugin turns it on in Retakes mode).
+- Retakes: [splewis/csgo-retakes](https://github.com/splewis/csgo-retakes) 0.3.4 (GPLv3), patched to start switched off (the match plugin turns it on in Retakes mode), with no warmup, and to skip empty weapon slots. The round types / insta plant / insta defuse plugin (`retakes_pack.sp`) is the pack's own. Source in `csgo/addons/sourcemod/scripting/retakes_source/`.
 - Community maps: varq.net.

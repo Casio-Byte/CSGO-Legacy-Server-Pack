@@ -579,18 +579,39 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
 RETAKES
 -------
 Pick "Retakes" in !gamemode (or as the default mode in start_server.bat
-setup). Every round the terrorists have already planted on a random site
-and the CTs have to retake it. Teams are balanced automatically; players
+setup). Every round the bomb is planted on a random site as the round
+starts (insta plant) and the CTs have to retake it. Teams are balanced automatically; players
 waiting for a slot join next round. Up to 9 players (sm_retakes_maxplayers).
 No warmup: rounds start as soon as two players are in.
 
-  !guns                 loadout menu (the standard retakes allocator):
-                        CT rifle (M4A4 / M4A1-S / AUG), T rifle (AK-47 /
-                        SG 553) and whether you want the AWP (one per
-                        team). Every round is a full buy: rifle, pistol,
-                        armour + helmet, a random grenade, kits for CTs.
-                        Your !loadout pistol picks (e.g. USP-S) and skins
-                        still apply.
+  !guns                 pick your guns for each round type, CT and T,
+                        and whether you want the AWP on full buys
+                        (one per team). Your choices are saved.
+
+Round types - the first 5 rounds of a map are pistol rounds, then each
+round is a random eco (15%), half buy (25%) or full buy (60%):
+  Pistol round  your pistol, kevlar (no helmet), maybe 1 grenade
+                CT: USP-S / P2000 / P250 / Five-SeveN / Deagle
+                T:  Glock / P250 / Tec-9 / Deagle
+  Eco           an eco pistol, kevlar (no helmet), 1 grenade
+                CT: Five-SeveN / Deagle / P250 / CZ75   T: Tec-9 / Deagle / P250 / CZ75
+  Half buy      SMG / shotgun / budget rifle + your pistol, kevlar + helmet,
+                1-2 grenades
+                CT: MP9 / MP7 / UMP-45 / FAMAS / MAG-7 / SSG 08
+                T:  MAC-10 / MP7 / UMP-45 / Galil AR / Sawed-Off / SSG 08
+  Full buy      rifle (or the AWP) + your pistol, kevlar + helmet, 2 grenades
+                CT: M4A4 / M4A1-S / AUG   T: AK-47 / SG 553
+  CTs always get a defuse kit. Skins from !ws still apply.
+
+Insta plant: the bomb is planted the moment the round starts.
+Insta defuse: once every T is dead (and no fire or grenade can still hit
+the defuser), a defuse finishes straight away if there's enough time on
+the bomb (5 s with a kit, 10 s without). If there isn't, the bomb goes off
+straight away instead of making everyone wait.
+Settings (cfg\sourcemod\retakes\retakes_pack.cfg, made on first start):
+  sm_retakes_pistol_rounds 5, sm_retakes_eco_chance 15,
+  sm_retakes_halfbuy_chance 25, sm_retakes_fullbuy_chance 60,
+  sm_retakes_instaplant 1, sm_retakes_instadefuse 1
   !scramble (admin)     shuffle the teams next round
 
 Spawns come with the pack for 24 maps (de_dust2, mirage, inferno, nuke,
@@ -648,5 +669,6 @@ Admin commands need the "b" or "z" flag. Two ways to get it:
 
 Credits: skin/glove handling follows kgns' Weapons & Knives and Gloves;
 sticker method and gamedata from quasemago's CS:GO Weapon Stickers (GPLv3).
-Retakes: splewis' csgo-retakes 0.3.4 with its standard allocator (GPLv3);
-source in addons\sourcemod\scripting\retakes_source.
+Retakes: splewis' csgo-retakes 0.3.4 (GPLv3) with the pack's own round
+types / insta plant / insta defuse plugin (retakes_pack.smx, replaces the
+standard allocator); source in addons\sourcemod\scripting\retakes_source.

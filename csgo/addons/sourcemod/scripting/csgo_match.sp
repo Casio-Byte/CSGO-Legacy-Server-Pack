@@ -1370,7 +1370,7 @@ void Cmd_Help(int client)
 	if (g_State == State_Arena)
 		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank — !duel gets you your own arena");
 	if (CurrentMode() == GM_Retakes)
-		Reply(client, "\x04Retakes:\x01 !guns (pick your weapons)");
+		Reply(client, "\x04Retakes:\x01 !guns (your guns for pistol / eco / half buy / full buy rounds)");
 	Reply(client, "\x04Skins:\x01 !ws !presets !knife !gloves !agents !stickers");
 	Reply(client, "\x04Votes:\x01 !rtv (new map) !rtg (new game mode) - not during a live match");
 	if (admin)
@@ -3877,7 +3877,7 @@ public Action Timer_RetakesAnnounce(Handle timer)
 	char map[PLATFORM_MAX_PATH];
 	GetCurrentMap(map, sizeof(map));
 	if (RetakesHasSpawns(map))
-		Announce("Game mode: \x04Retakes\x01. Type \x04!guns\x01 to pick your weapons. Admins can change mode with \x04!gamemode\x01.");
+		Announce("Game mode: \x04Retakes\x01 - pistol rounds first, then eco / half buy / full buy. Type \x04!guns\x01 to pick your weapons.");
 	else
 		Announce("\x02This map has no retakes spawns yet.\x01 Admins: \x04!gamemode\x01 → Retakes for a map that has them, or \x04!edit\x01 to add spawns.");
 	return Plugin_Stop;

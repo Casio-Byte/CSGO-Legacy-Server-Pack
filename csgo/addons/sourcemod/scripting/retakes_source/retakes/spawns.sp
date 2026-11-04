@@ -158,8 +158,11 @@ public void GiveWeapons(int client) {
     else
         GivePlayerItem(client, "weapon_knife");
 
-    GivePlayerItem(client, g_PlayerPrimary[client]);
-    GivePlayerItem(client, g_PlayerSecondary[client]);
+    // CS:GO server pack: pistol / eco rounds have no primary.
+    if (g_PlayerPrimary[client][0] != '\0')
+        GivePlayerItem(client, g_PlayerPrimary[client]);
+    if (g_PlayerSecondary[client][0] != '\0')
+        GivePlayerItem(client, g_PlayerSecondary[client]);
 
     Client_SetArmor(client, g_PlayerArmor[client]);
     SetEntityHealth(client, g_PlayerHealth[client]);

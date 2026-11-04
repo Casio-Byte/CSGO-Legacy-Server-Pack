@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.5.0-20261104"
+#define PLUGIN_VERSION "1.5.1-20261104"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
@@ -1550,9 +1550,8 @@ public Action Hook_WeaponEquip(int client, int weapon)
 
 	// Loadout slots: swap a new default weapon (e.g. P2000) for the player's pick (USP-S).
 	int slot = FindSwapSlot(client, def);
-	// In Retakes the M4 comes from the player's !guns pick, so leave M4A4 / M4A1-S alone.
-	bool retakesRifle = IsRetakesRunning() && (def == 16 || def == 60);
-	if (slot != -1 && !IsDuelRunning() && !retakesRifle && IsFreshWeapon(client, weapon))
+	// In Retakes every gun comes from the player's !guns picks - no swaps.
+	if (slot != -1 && !IsDuelRunning() && !IsRetakesRunning() && IsFreshWeapon(client, weapon))
 	{
 		int refund = 0;
 		if (GetGameTime() - g_LastBuyTime[client] < 0.5)
@@ -1634,7 +1633,7 @@ void ApplyWeaponSkin(int client, int weapon, int def)
 
 // The match plugin sets this during a 1v1 duel, where both players must get
 // exactly the weapon that was agreed on.
-// Retakes hands out rifles from its own !guns choices.
+// Retakes hands out guns from its own !guns choices.
 bool IsRetakesRunning()
 {
 	static ConVar cv = null;
