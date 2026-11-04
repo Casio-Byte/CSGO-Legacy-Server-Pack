@@ -373,8 +373,10 @@ Game modes (admins)
   Deathmatch is free-for-all (everyone against everyone, random spawns),
   with no bonus weapon rounds. Everyone spawns with a knife, AK-47 and
   Desert Eagle (with their own skins) and the buy menu is off for
-  players. (Bots still "buy" - the plugin swaps their guns for the AK
-  and Deagle - because bots that can't buy stand still.)
+  players. Bots get exactly the same: any other gun (bought, picked up
+  or given) is taken away straight away and replaced with the AK /
+  Deagle, and nobody drops guns on death. (Bots are still allowed to
+  "buy" - bots that can't buy stand still.)
   Bots play on Expert in every mode (bot_difficulty 3 in server.cfg). Turn the fixed guns off with
   match_dm_loadout 0.
   Every mode: no team-select screen after a map loads - players are put

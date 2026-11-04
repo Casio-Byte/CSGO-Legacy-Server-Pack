@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.18.0-20261104"
+#define PLUGIN_VERSION "1.19.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -619,6 +619,7 @@ void ApplyBootMode()
 
 public void OnMapEnd()
 {
+	g_DmNoBuy = false; // set again by DmApply if the next map is Deathmatch too
 	g_VetoTimer = null;     // killed by TIMER_FLAG_NO_MAPCHANGE
 	if (g_VetoRunning)
 		CancelSeries("");   // map changed mid-veto
@@ -660,6 +661,9 @@ public void OnClientPutInServer(int client)
 	SDKHook(client, SDKHook_TraceAttack, Hook_DuelTraceAttack);
 	if (!IsFakeClient(client))
 		SDKHook(client, SDKHook_PostThinkPost, Hook_DmNoBuyZone);
+	// Deathmatch: everyone (bots too) may only hold knife, AK-47 and Deagle.
+	SDKHook(client, SDKHook_WeaponCanUse, Hook_DmWeaponCanUse);
+	SDKHook(client, SDKHook_WeaponEquipPost, Hook_DmWeaponEquipPost);
 	// In LAN mode / -insecure the admin check may never run; don't wait for it.
 	if (!IsFakeClient(client))
 		CreateTimer(4.0, Timer_JoinFallback, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
@@ -3003,6 +3007,7 @@ char g_DmFfaCvars[][][] =
 char g_DmLoadoutCvars[][][] =
 {
 	{ "mp_buy_anywhere", "0" }, // the client would open the menu anywhere otherwise
+	{ "mp_death_drop_gun", "0" }, // no other guns lying around to pick up
 	{ "mp_t_default_primary", "weapon_ak47" },
 	{ "mp_ct_default_primary", "weapon_ak47" },
 	{ "mp_t_default_secondary", "weapon_deagle" },
@@ -3124,6 +3129,54 @@ public Action Listener_DmBuy(int client, const char[] command, int argc)
 	if (client > 0 && IsClientInGame(client) && !IsFakeClient(client) && DmLoadoutOn())
 		return Plugin_Handled;
 	return Plugin_Continue;
+}
+
+// The only weapons anyone may hold in Deathmatch.
+bool DmWeaponAllowed(int weapon)
+{
+	if (weapon <= 0 || !IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"))
+		return true;
+	int def = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+	if (def == 7 || def == 1 || def == 64) // AK-47, Desert Eagle (R8 if picked in !loadout)
+		return true;
+	return def == 42 || def == 59 || (def >= 500 && def <= 525); // knives
+}
+
+public Action Hook_DmWeaponCanUse(int client, int weapon)
+{
+	if (g_DmNoBuy && !DmWeaponAllowed(weapon))
+		return Plugin_Handled; // can't pick it up
+	return Plugin_Continue;
+}
+
+public void Hook_DmWeaponEquipPost(int client, int weapon)
+{
+	if (!g_DmNoBuy || DmWeaponAllowed(weapon))
+		return;
+	// Bought (bots) or given by the game: take it away next frame, then make
+	// sure the AK / Deagle / knife are there.
+	DataPack pack = new DataPack();
+	pack.WriteCell(GetClientUserId(client));
+	pack.WriteCell(EntIndexToEntRef(weapon));
+	RequestFrame(Frame_DmStripWeapon, pack);
+}
+
+public void Frame_DmStripWeapon(DataPack pack)
+{
+	pack.Reset();
+	int client = GetClientOfUserId(pack.ReadCell());
+	int weapon = EntRefToEntIndex(pack.ReadCell());
+	delete pack;
+	if (client <= 0 || !IsClientInGame(client) || !g_DmNoBuy)
+		return;
+	if (weapon != INVALID_ENT_REFERENCE && IsValidEntity(weapon)
+		&& GetEntPropEnt(weapon, Prop_Send, "m_hOwnerEntity") == client)
+	{
+		RemovePlayerItem(client, weapon);
+		AcceptEntityInput(weapon, "Kill");
+	}
+	if (IsPlayerAlive(client))
+		CreateTimer(0.1, Timer_DmLoadout, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 // Deathmatch: humans are never "in a buy zone", so the buy menu can't open.
