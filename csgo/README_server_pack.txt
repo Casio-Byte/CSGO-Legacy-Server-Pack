@@ -45,7 +45,7 @@ INSTALL (drag and drop)
        server name, join password, RCON password, admin password,
        max players, tickrate, port,
        default game mode (menu: 5v5, wingman, casual, deathmatch, arms
-       race, demolition, practice, 1v1 duels or arenas) and the first
+       race, demolition, practice, 1v1 duels, arenas or retakes) and the first
        map (menu of that mode's maps, or type a name),
        LAN / virtual LAN or internet (+ login token for internet),
        the address players download maps from (your public IP for

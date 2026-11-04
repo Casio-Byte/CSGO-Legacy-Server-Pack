@@ -65,7 +65,7 @@ The first run (or `start_server.bat setup`) asks for:
 
 - server name, join password, RCON password (left empty, a random one is generated) and admin password (for `/login`)
 - max players, tickrate and port
-- **default game mode** (a numbered menu of all 9 modes) and the **first map** (a menu of that mode's maps marked installed / downloads on start, or type a name; maps that don't suit the mode are refused)
+- **default game mode** (a numbered menu of all 10 modes) and the **first map** (a menu of that mode's maps marked installed / downloads on start, or type a name; maps that don't suit the mode are refused)
 - **network**: `1` LAN / virtual LAN (Tailscale, ZeroTier) or `2` Internet (asks for a login token, App ID 730)
 - the address players download maps from. In Internet mode your public IP is filled in automatically.
 - auto-download community maps, run FastDL, auto-restart on crash

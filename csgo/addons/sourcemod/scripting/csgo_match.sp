@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.17.0-20261104"
+#define PLUGIN_VERSION "1.17.1-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -2787,6 +2787,13 @@ public Action Timer_AutoTeamCheck(Handle timer, int userid)
 	int client = GetClientOfUserId(userid);
 	if (client <= 0 || !IsClientInGame(client) || GetClientTeam(client) != CS_TEAM_NONE)
 		return Plugin_Stop;
+	// Arenas, duels and retakes place players themselves (next round / queue):
+	// watch until then instead of a blank screen.
+	if (g_State == State_Arena || g_State == State_Duel || g_RetakesNext)
+	{
+		ChangeClientTeam(client, CS_TEAM_SPECTATOR);
+		return Plugin_Stop;
+	}
 	int other = GetTeamClientCount(CS_TEAM_T) <= GetTeamClientCount(CS_TEAM_CT) ? CS_TEAM_T : CS_TEAM_CT;
 	FakeClientCommand(client, "jointeam %d 1", other);
 	CreateTimer(1.0, Timer_AutoTeamLast, userid, TIMER_FLAG_NO_MAPCHANGE);
@@ -2984,8 +2991,6 @@ char g_DmFfaCvars[][][] =
 	{ "mp_dm_time_between_bonus_min", "99999" },
 	{ "mp_dm_time_between_bonus_max", "99999" },
 	{ "mp_dm_bonus_percent", "0" },
-	// bots on Expert
-	{ "bot_difficulty", "3" }
 };
 char g_DmLoadoutCvars[][][] =
 {
@@ -3020,8 +3025,11 @@ void DmApply()
 		DmRestore();
 		return;
 	}
+	// Bots on Expert (also the server.cfg default; not restored afterwards).
 	ConVar diff = FindConVar("bot_difficulty");
 	bool reAddBots = diff != null && diff.IntValue != 3;
+	if (diff != null)
+		diff.IntValue = 3;
 	for (int i = 0; i < sizeof(g_DmFfaCvars); i++)
 		DmSetCvar(g_DmFfaCvars[i][0], g_DmFfaCvars[i][1]);
 	// Bots must move and shoot (left-over practice / test settings could freeze them).
@@ -3045,22 +3053,44 @@ void DmApply()
 	}
 }
 
+/* Leaving Deathmatch. The saved values were Deathmatch's own (its game mode
+   cfg had already run), so they're not put back: each cvar goes back to the
+   game's default, then the new mode's own game mode cfg runs again so its
+   values (buy time, spawns...) win. The plugin's mode configs come after. */
 void DmRestore()
 {
 	if (g_DmSaved == null || g_DmSaved.Size == 0)
 		return;
 	StringMapSnapshot snap = g_DmSaved.Snapshot();
-	char name[64], value[128];
+	char name[64];
 	for (int i = 0; i < snap.Length; i++)
 	{
 		snap.GetKey(i, name, sizeof(name));
-		g_DmSaved.GetString(name, value, sizeof(value));
 		ConVar cv = FindConVar(name);
 		if (cv != null)
-			cv.SetString(value);
+			cv.RestoreDefault();
 	}
 	delete snap;
 	g_DmSaved.Clear();
+
+	char gm[32];
+	int type = GetCvarInt("game_type"), mode = GetCvarInt("game_mode");
+	if (type == 0 && mode == 0)      strcopy(gm, sizeof(gm), "casual");
+	else if (type == 0 && mode == 1) strcopy(gm, sizeof(gm), "competitive");
+	else if (type == 0 && mode == 2) strcopy(gm, sizeof(gm), "competitive2v2");
+	else if (type == 1 && mode == 0) strcopy(gm, sizeof(gm), "armsrace");
+	else if (type == 1 && mode == 1) strcopy(gm, sizeof(gm), "demolition");
+	else return;
+	char file[64];
+	Format(file, sizeof(file), "cfg/gamemode_%s.cfg", gm);
+	if (FileExists(file, true))
+		ServerCommand("exec gamemode_%s.cfg", gm);
+	Format(file, sizeof(file), "cfg/gamemode_%s_server.cfg", gm);
+	if (FileExists(file, true))
+		ServerCommand("exec gamemode_%s_server.cfg", gm);
+	// Same order as a map load: server.cfg after the game mode cfg (bot difficulty etc.).
+	if (FileExists("cfg/server.cfg", true))
+		ServerCommand("exec server.cfg");
 }
 
 int GetBotCount()

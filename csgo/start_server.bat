@@ -23,7 +23,7 @@ set "SRCDS=%~dp0..\srcds.exe"
 if not exist "%SRCDS%" (
     echo.
     echo Could not find srcds.exe one folder above this file:
-    echo   %SRCDS%
+    echo   "%SRCDS%"
     echo start_server.bat must be in your server's csgo folder ^(the folder that
     echo contains addons, cfg and maps - srcds.exe is in the folder above it^).
     echo.
@@ -205,6 +205,8 @@ $modes = @(
 
 # Which modes a map suits (same rules as the match plugin).
 function MapFits([string]$m, [string]$folder) {
+    # A map in the mode's own folder always counts for that mode.
+    if (Test-Path (Join-Path $csgo "maps\modes\$folder\$m.bsp")) { return $true }
     $m = $m.ToLower()
     if ($m -match '^(kz_|bhop_|surf_)') { return $false }
     if ($m.StartsWith('am_'))  { return $folder -eq 'arena' }
