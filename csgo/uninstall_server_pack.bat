@@ -80,6 +80,14 @@ $items = @(
 )
 $maps = @('maps\modes', 'map folders per game mode, incl. downloaded community maps')
 
+# Copies of mode-folder maps that start_server.bat put into csgo\maps
+$copyLog = Join-Path $csgo 'maps\modes\copied_to_maps.txt'
+if (Test-Path $copyLog) {
+    $copied = @(Get-Content $copyLog | Where-Object { $_ -match '^[^\\/:*?"<>|]+\.(bsp|nav)$' })
+    foreach ($c in $copied) { $items += ,@("maps\$c", '') }
+    if ($copied.Count) { $items[-1] = @($items[-1][0], 'copies of the mode-folder maps in csgo\maps') }
+}
+
 $found = New-Object System.Collections.ArrayList
 foreach ($i in $items) {
     if (Test-Path (Join-Path $csgo $i[0])) { [void]$found.Add($i) }

@@ -199,6 +199,13 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\arena\          Multi-1v1 arenas
   csgo\maps\modes\retakes\        Retakes
 
+The game only loads maps reliably from csgo\maps itself (and its Workshop
+folder), so start_server.bat copies every .bsp / .nav from the mode folders
+into csgo\maps before each start. Maps already in csgo\maps (e.g. the
+official ones) are never overwritten; the copies are listed in
+maps\modes\copied_to_maps.txt and removed by uninstall_server_pack.bat. A
+map you add while the server runs is copied when it's picked.
+
 Each folder also has a maplist.txt of standard maps for that mode. Installed
 ones are listed near the top of the menu; missing ones are shown greyed out
 as "(not installed)" so you know what to get. Edit maplist.txt to change it.

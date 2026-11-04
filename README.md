@@ -165,7 +165,7 @@ In every mode there's no team-select screen after a map loads: players are put o
 
 A map in a mode's own folder always counts for that mode. The map menus only list maps that fit, and `!map` on a map that doesn't suit the current mode asks which fitting mode to switch to.
 
-Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
+Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. The game only loads maps reliably from `csgo/maps` itself, so `start_server.bat` copies mode-folder maps there before each start (never overwriting existing maps; listed in `maps/modes/copied_to_maps.txt`, removed by the uninstaller), and the plugin copies a newly added one when it's picked. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
 ### Rock the vote: `!rtv`
 Type `!rtv` (or just `rtv`). When 60% of players have (`match_rtv_ratio`), everyone votes between up to 6 maps of the current mode and "Stay"; the winner loads in the same mode. Works in every mode, but **never during a live 5v5 or wingman match** (knife round and side pick included) or a best of 3. Before `!ready` is fine. Opens 30 s after a map loads; after a "stay" result the next vote can start 3 minutes later. `match_rtv_enabled 0` turns it off.

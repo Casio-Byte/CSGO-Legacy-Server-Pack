@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.21.0-20261104"
+#define PLUGIN_VERSION "1.22.0-20261104"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -3803,7 +3803,7 @@ public Action Timer_RtvChange(Handle timer)
 		return Plugin_Stop;
 	}
 	// Same mode, new map: the mode flags and game_type/game_mode stay as they are.
-	ServerCommand("changelevel %s", target);
+	ChangeLevelTo(target);
 	return Plugin_Stop;
 }
 
@@ -4003,7 +4003,7 @@ bool MapFitsMode(int gm, const char[] path)
 {
 	if (gm < 0)
 		return true;
-	if (ModeOfMapPath(path) == gm)
+	if (ModeOfMapPath(path) == gm || MapInModeFolder(gm, path))
 		return true;
 	int want = FittingModeForMap(path);
 	if (want == -2)
@@ -4160,7 +4160,7 @@ public Action Timer_SwitchMode(Handle timer)
 		g_cvDuelActive.BoolValue = false;
 	ServerCommand("game_type %d", g_GmType[gm]);
 	ServerCommand("game_mode %d", g_GmMode[gm]);
-	ServerCommand("changelevel %s", g_SwitchMap);
+	ChangeLevelTo(g_SwitchMap);
 	return Plugin_Stop;
 }
 
@@ -4598,8 +4598,96 @@ void ReadModeMapList(int gm, ArrayList list)
 // Finds the exact map and gives the path changelevel needs. A bare name of a
 // workshop map ("am_walterv2") becomes "workshop/<id>/am_walterv2",
 // because changelevel with only the bare name lets the game guess (de_train).
+// Copies a file byte for byte (false if it can't).
+bool CopyGameFile(const char[] src, const char[] dst)
+{
+	File src_f = OpenFile(src, "rb", true);
+	if (src_f == null)
+		return false;
+	File out = OpenFile(dst, "wb");
+	if (out == null)
+	{
+		delete src_f;
+		return false;
+	}
+	static int buf[8192]; // static: too big for the plugin stack
+	int n;
+	while ((n = src_f.Read(buf, sizeof(buf), 1)) > 0)
+		out.Write(buf, n, 1);
+	delete src_f;
+	delete out;
+	return true;
+}
+
+/* A map from a mode folder (modes/<mode>/<name>): make sure maps/<name>.bsp
+   exists - copy it (and its .nav) if needed, never overwriting a map that's
+   already there - and give the name changelevel should use. start_server.bat
+   does the same before each start; this covers maps added while it runs. */
+void PlayableMapPath(const char[] map, char[] out, int maxlen)
+{
+	strcopy(out, maxlen, map);
+	if (strncmp(map, "modes/", 6, false) != 0)
+		return;
+	char name[PLATFORM_MAX_PATH], src[PLATFORM_MAX_PATH], dst[PLATFORM_MAX_PATH];
+	MapShortName(map, name, sizeof(name));
+	Format(dst, sizeof(dst), "maps/%s.bsp", name);
+	if (!FileExists(dst, true))
+	{
+		Format(src, sizeof(src), "maps/%s.bsp", map);
+		if (!CopyGameFile(src, dst))
+		{
+			LogError("Couldn't copy %s to %s - loading it from its mode folder instead.", src, dst);
+			return;
+		}
+		Format(src, sizeof(src), "maps/%s.nav", map);
+		Format(dst, sizeof(dst), "maps/%s.nav", name);
+		if (FileExists(src, true) && !FileExists(dst, true))
+			CopyGameFile(src, dst);
+		File log = OpenFile("maps/modes/copied_to_maps.txt", "a");
+		if (log != null)
+		{
+			log.WriteLine("%s.bsp", name);
+			log.WriteLine("%s.nav", name);
+			delete log;
+		}
+		LogMessage("Copied %s into maps\\ so the game can load it.", map);
+	}
+	strcopy(out, maxlen, name);
+}
+
+void ChangeLevelTo(const char[] map)
+{
+	char path[PLATFORM_MAX_PATH];
+	PlayableMapPath(map, path, sizeof(path));
+	ServerCommand("changelevel %s", path);
+}
+
+// Is <map> (any path) a .bsp in this mode's own folder, maps/modes/<folder>/?
+bool MapInModeFolder(int gm, const char[] map)
+{
+	if (gm < 0 || gm >= GM_COUNT)
+		return false;
+	char name[PLATFORM_MAX_PATH], file[PLATFORM_MAX_PATH];
+	MapShortName(map, name, sizeof(name));
+	Format(file, sizeof(file), "maps/modes/%s/%s.bsp", g_GmFolder[gm], name);
+	return FileExists(file, true);
+}
+
 bool ResolveMap(const char[] map, char[] out, int maxlen)
 {
+	// Maps from the mode folders load from their copy in maps\ (start_server.bat
+	// copies them there): the game doesn't reliably load maps from other folders.
+	if (strncmp(map, "modes/", 6, false) == 0)
+	{
+		char name[PLATFORM_MAX_PATH], root[PLATFORM_MAX_PATH];
+		MapShortName(map, name, sizeof(name));
+		Format(root, sizeof(root), "maps/%s.bsp", name);
+		if (FileExists(root, true))
+		{
+			strcopy(out, maxlen, name);
+			return true;
+		}
+	}
 	char found[PLATFORM_MAX_PATH];
 	FindMapResult r = FindMap(map, found, sizeof(found));
 	if (r == FindMap_Found)
@@ -4647,12 +4735,12 @@ bool ResolveMap(const char[] map, char[] out, int maxlen)
 
 bool MapInstalled(int gm, const char[] name, char[] mapPath, int maxlen)
 {
-	// In the mode's folder, or anywhere the game can find it (maps\, workshop).
+	// maps\ (incl. the copies of mode-folder maps) or workshop first, then the mode's folder.
+	if (ResolveMap(name, mapPath, maxlen))
+		return true;
 	char inFolder[PLATFORM_MAX_PATH];
 	Format(inFolder, sizeof(inFolder), "modes/%s/%s", g_GmFolder[gm], name);
-	if (ResolveMap(inFolder, mapPath, maxlen))
-		return true;
-	return ResolveMap(name, mapPath, maxlen);
+	return ResolveMap(inFolder, mapPath, maxlen);
 }
 
 // Standard maps (maplist.txt) that are installed. Returns how many were added.
@@ -4720,7 +4808,10 @@ int AddFolderMaps(Menu menu, int gm, StringMap seen)
 	{
 		names.GetString(i, file, sizeof(file));
 		Format(map, sizeof(map), "modes/%s/%s", g_GmFolder[gm], file);
-		found += TryAddMap(menu, map, seen);
+		char path[PLATFORM_MAX_PATH];
+		if (!ResolveMap(map, path, sizeof(path)))
+			strcopy(path, sizeof(path), map);
+		found += TryAddMap(menu, path, seen);
 	}
 	delete names;
 	return found;
@@ -6192,7 +6283,7 @@ public Action Timer_ChangeMap(Handle timer)
 		Announce("\x02Can't change map: %s isn't installed on the server.", g_SwitchMap);
 		return Plugin_Stop;
 	}
-	ServerCommand("changelevel %s", target);
+	ChangeLevelTo(target);
 	return Plugin_Stop;
 }
 

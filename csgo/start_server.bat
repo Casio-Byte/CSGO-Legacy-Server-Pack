@@ -80,10 +80,14 @@ if "%START_FASTDL%"=="1" (
 )
 
 :findmap
-rem The map's real path: its mode folder, csgo\maps, or a Workshop folder.
+rem Maps in the mode folders (csgo\maps\modes\<mode>\) are copied into csgo\maps\:
+rem the game only loads maps reliably from there (or its Workshop folder).
+rem Existing maps are never overwritten - only copies made here are updated.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$m = Join-Path $env:CSGO_DIR 'maps'; $log = Join-Path $m 'modes\copied_to_maps.txt'; $done = @{}; if (Test-Path $log) { Get-Content $log | ForEach-Object { $done[$_] = 1 } }; $n = 0; Get-ChildItem (Join-Path $m 'modes') -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq '.bsp' -or $_.Extension -eq '.nav' } | ForEach-Object { $t = Join-Path $m $_.Name; $mine = $done.ContainsKey($_.Name); if (-not (Test-Path $t) -or ($mine -and (Get-Item $t).LastWriteTime -lt $_.LastWriteTime)) { Copy-Item $_.FullName $t -Force; $done[$_.Name] = 1; $n++ } }; if ($n) { $done.Keys | Sort-Object | Set-Content $log; Write-Host ('Copied ' + $n + ' mode-folder map file(s) into csgo\maps.') }"
+rem The map's real path: csgo\maps, its mode folder, or a Workshop folder.
 set "MAP_PATH="
-if exist "%CSGO_DIR%maps\modes\%SETUP_GAMEMODE%\%SETUP_MAP%.bsp" set "MAP_PATH=modes/%SETUP_GAMEMODE%/%SETUP_MAP%"
-if not defined MAP_PATH if exist "%CSGO_DIR%maps\%SETUP_MAP%.bsp" set "MAP_PATH=%SETUP_MAP%"
+if exist "%CSGO_DIR%maps\%SETUP_MAP%.bsp" set "MAP_PATH=%SETUP_MAP%"
+if not defined MAP_PATH if exist "%CSGO_DIR%maps\modes\%SETUP_GAMEMODE%\%SETUP_MAP%.bsp" set "MAP_PATH=modes/%SETUP_GAMEMODE%/%SETUP_MAP%"
 if not defined MAP_PATH if exist "%CSGO_DIR%maps\workshop\" for /d %%D in ("%CSGO_DIR%maps\workshop\*") do if exist "%%~fD\%SETUP_MAP%.bsp" set "MAP_PATH=workshop/%%~nxD/%SETUP_MAP%"
 set "START_ARGS=%MODE_ARGS% +map %MAP_PATH%"
 if defined MAP_PATH goto :server
