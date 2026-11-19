@@ -64,16 +64,49 @@ Updating an existing server: the pack ships a clean `cfg/server.cfg` and an empt
 
 One program replaces the old `.bat` launchers. It starts and stops the server, shows its console, and has tabs for setup, maps, players, bans, admins, matches and backups. Nothing to install (.NET Framework 4.x is part of Windows).
 
-![CSGO Server Control - Info tab](docs/screenshots/info.png)
+![CSGO Server Control - Info tab](docs/screenshots/01_info.png)
 
 <details>
-<summary>More screenshots: Setup, Console, Players, Teams, Graphs</summary>
+<summary>Screenshots of every tab (click to open)</summary>
 
-![Setup tab](docs/screenshots/setup.png)
-![Console tab](docs/screenshots/console.png)
-![Players tab with in-game chat](docs/screenshots/players.png)
-![Teams tab](docs/screenshots/teams.png)
-![Graphs tab](docs/screenshots/graphs.png)
+**Setup**
+![Setup tab](docs/screenshots/02_setup.png)
+
+**Features**
+![Features tab](docs/screenshots/03_features.png)
+
+**Plugins**
+![Plugins tab](docs/screenshots/04_plugins.png)
+
+**Maps**
+![Maps tab](docs/screenshots/05_maps.png)
+
+**Maps - Suggested maps**
+![Suggested maps window](docs/screenshots/05b_maps_suggested.png)
+
+**Players**
+![Players tab with in-game chat](docs/screenshots/06_players.png)
+
+**Teams**
+![Teams tab](docs/screenshots/07_teams.png)
+
+**Matches**
+![Matches tab](docs/screenshots/08_matches.png)
+
+**Bans**
+![Bans tab](docs/screenshots/09_bans.png)
+
+**Admins**
+![Admins tab](docs/screenshots/10_admins.png)
+
+**Backups**
+![Backups tab](docs/screenshots/11_backups.png)
+
+**Graphs**
+![Graphs tab](docs/screenshots/12_graphs.png)
+
+**Console**
+![Console tab](docs/screenshots/13_console.png)
 
 </details>
 
