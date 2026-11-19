@@ -30,7 +30,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.6.1-20261104"
+#define PLUGIN_VERSION "1.7.0-20261108"
 #define PREFIX " \x01[\x04Loadout\x01] "
 #define MAX_STICKER_SLOTS 4
 #define MAX_PATCH_SLOTS 3   // agents have three patch spots
@@ -217,6 +217,15 @@ int   g_KnifeTries[MAXPLAYERS + 1];
 bool  g_KnifeWarned = false;
 
 int g_EntOwner[2049];         // userid whose skin is on this weapon (0 = none)
+// Buy menu: the game's menu shows the default weapon's price (M4A4 $3100), so a
+// player with M4A1-S picked and $2900 couldn't click it. While they can buy,
+// their money is shown that much higher (g_Credit) - they still pay the M4A1-S price.
+int g_Credit[MAXPLAYERS + 1];
+bool g_CreditHinted[MAXPLAYERS + 1];
+bool g_SlotsRedraw[MAXPLAYERS + 1];   // the slots menu is being shown again (not closed)
+// The skin put on each weapon, so it can be shown again when someone else picks it up.
+int g_EntPaint[2049], g_EntSeed[2049], g_EntStat[2049], g_EntQuality[2049], g_EntAccount[2049];
+float g_EntWear[2049];
 
 /* ------------------------------------------------------------------ */
 /*  Sticker internals                                                 */
@@ -305,6 +314,8 @@ public void OnPluginStart()
 
 	HookEvent("player_spawn", Event_PlayerSpawn);
 	HookEvent("player_death", Event_PlayerDeath);
+	HookEvent("player_death", Event_DeathCredit, EventHookMode_Pre);
+	HookEvent("round_prestart", Event_RoundPrestartCredit, EventHookMode_PostNoCopy);
 
 	char dir[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, dir, sizeof(dir), "data/csgo_loadout");
@@ -334,6 +345,99 @@ public void OnMapStart()
 {
 	LoadPresets();
 	PrecacheAgents();
+	for (int i = 1; i <= MaxClients; i++) { g_Credit[i] = 0; g_CreditHinted[i] = false; }
+	CreateTimer(0.25, Timer_BuyCredit, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+}
+
+/* ---------- Buy menu: let the cheaper picked weapon be bought ---------- */
+
+void DropCredit(int client)
+{
+	if (g_Credit[client] != 0 && IsClientInGame(client))
+		SetEntProp(client, Prop_Send, "m_iAccount", GetEntProp(client, Prop_Send, "m_iAccount") - g_Credit[client]);
+	g_Credit[client] = 0;
+}
+
+public void Event_DeathCredit(Event event, const char[] name, bool dontBroadcast)
+{
+	int c = GetClientOfUserId(event.GetInt("userid"));
+	if (c > 0) DropCredit(c);
+}
+
+public void Event_RoundPrestartCredit(Event event, const char[] name, bool dontBroadcast)
+{
+	for (int i = 1; i <= MaxClients; i++)
+		if (IsClientInGame(i)) DropCredit(i);
+}
+
+bool CanBuyNow(int client)
+{
+	if (!IsPlayerAlive(client) || !GetEntProp(client, Prop_Send, "m_bInBuyZone"))
+		return false;
+	if (GameRules_GetProp("m_bFreezePeriod"))
+		return true;
+	static ConVar buytime = null;
+	if (buytime == null) buytime = FindConVar("mp_buytime");
+	float t = buytime != null ? buytime.FloatValue : 20.0;
+	return GetGameTime() - GameRules_GetPropFloat("m_fRoundStartTime") < t;
+}
+
+bool HoldsDef(int client, int def)
+{
+	int size = GetEntPropArraySize(client, Prop_Send, "m_hMyWeapons");
+	for (int i = 0; i < size; i++)
+	{
+		int w = GetEntPropEnt(client, Prop_Send, "m_hMyWeapons", i);
+		if (w != -1 && IsValidEntity(w) && GetEntProp(w, Prop_Send, "m_iItemDefinitionIndex") == def)
+			return true;
+	}
+	return false;
+}
+
+public Action Timer_BuyCredit(Handle timer)
+{
+	for (int client = 1; client <= MaxClients; client++)
+	{
+		if (!IsClientInGame(client))
+		{
+			g_Credit[client] = 0;
+			continue;
+		}
+		if (IsFakeClient(client) || !g_Loaded[client])
+			continue;
+		int money = GetEntProp(client, Prop_Send, "m_iAccount");
+		int real = money - g_Credit[client];
+		int want = 0, slotFor = -1;
+		int team = GetClientTeam(client);
+		if ((team == 2 || team == 3) && !IsDuelRunning() && !IsRetakesRunning() && CanBuyNow(client))
+		{
+			for (int i = 0; i < SLOT_COUNT; i++)
+			{
+				if (!g_SlotAltOn[client][i] || (g_SlotTeam[i] != 0 && g_SlotTeam[i] != team))
+					continue;
+				int dp = GetDefPrice(client, g_SlotDefault[i]), ap = GetDefPrice(client, g_SlotAlt[i]);
+				if (ap <= 0 || dp <= ap || real < ap || real >= dp)
+					continue;
+				if (HoldsDef(client, g_SlotAlt[i]) || HoldsDef(client, g_SlotDefault[i]))
+					continue;
+				if (dp - real > want) { want = dp - real; slotFor = i; }
+			}
+		}
+		if (want == g_Credit[client])
+			continue;
+		if (real < 0) real = 0;
+		SetEntProp(client, Prop_Send, "m_iAccount", real + want);
+		g_Credit[client] = want;
+		if (want > 0 && !g_CreditHinted[client] && slotFor >= 0)
+		{
+			g_CreditHinted[client] = true;
+			WeaponInfo alt, def;
+			GetWeaponByDef(g_SlotAlt[slotFor], alt);
+			GetWeaponByDef(g_SlotDefault[slotFor], def);
+			PrintToChat(client, "%sThe buy menu shows the %s price for your \x04%s\x01, so your money shows $%d more while you can buy - you only pay the %s price.", PREFIX, def.name, alt.name, want, alt.name);
+		}
+	}
+	return Plugin_Continue;
 }
 
 public void OnClientConnected(int client)
@@ -441,6 +545,7 @@ bool HasSkinFor(int client, int def)
 
 public void OnClientDisconnect(int client)
 {
+	g_Credit[client] = 0; g_CreditHinted[client] = false;
 	// Auto-save on the way out, whatever was changed and however.
 	if (g_Loaded[client] && !IsFakeClient(client))
 		SavePlayer(client);
@@ -452,7 +557,10 @@ public void OnClientDisconnect(int client)
 public void OnEntityCreated(int entity, const char[] classname)
 {
 	if (entity > 0 && entity < sizeof(g_EntOwner))
+	{
 		g_EntOwner[entity] = 0;
+		g_EntPaint[entity] = 0;
+	}
 }
 
 void ResetPlayer(int client)
@@ -1014,12 +1122,15 @@ bool LoadLocalization()
 	if (FileExists(cachePath))
 	{
 		KeyValues cache = new KeyValues("names");
-		if (cache.ImportFromFile(cachePath) && cache.GotoFirstSubKey(false))
+		// "_complete" is written last: a cache without it (old or broken file) is rebuilt.
+		if (cache.ImportFromFile(cachePath) && cache.GetNum("_complete", 0) == 1 && cache.GotoFirstSubKey(false))
 		{
 			char key[128], value[NAME_LEN];
 			do
 			{
 				cache.GetSectionName(key, sizeof(key));
+				if (StrEqual(key, "_complete"))
+					continue;
 				cache.GetString(NULL_STRING, value, sizeof(value));
 				g_Loc.SetString(key, value);
 			}
@@ -1028,6 +1139,7 @@ bool LoadLocalization()
 		delete cache;
 		if (g_Loc.Size > 0)
 			return true;
+		g_Loc.Clear();
 	}
 
 	File f = OpenFile("resource/csgo_english.txt", "rb", true);
@@ -1100,9 +1212,15 @@ bool LoadLocalization()
 	{
 		snap.GetKey(i, key, sizeof(key));
 		if (g_Loc.GetString(key, value, sizeof(value)))
+		{
+			// A " inside a name broke the cache file (KeyValues doesn't escape it).
+			ReplaceString(value, sizeof(value), "\"", "'");
+			ReplaceString(key, sizeof(key), "\"", "'");
 			out.SetString(key, value);
+		}
 	}
 	delete snap;
+	out.SetNum("_complete", 1);
 	out.ExportToFile(cachePath);
 	delete out;
 	return true;
@@ -1573,7 +1691,21 @@ bool IsValidHuman(int client)
 
 public Action Hook_WeaponEquip(int client, int weapon)
 {
-	if (!IsValidHuman(client) || !g_Loaded[client] || !IsValidEntity(weapon))
+	if (client < 1 || client > MaxClients || !IsClientInGame(client) || !IsValidEntity(weapon))
+		return Plugin_Continue;
+
+	// A weapon someone else dropped keeps their skin - for everyone who sees it.
+	if (weapon > 0 && weapon < sizeof(g_EntOwner) && g_EntOwner[weapon] > 0 && g_EntOwner[weapon] != GetClientUserId(client))
+	{
+		ShowDroppedSkin(client, weapon);
+		DataPack dp = new DataPack();
+		dp.WriteCell(GetClientUserId(client));
+		dp.WriteCell(EntIndexToEntRef(weapon));
+		RequestFrame(Frame_ShowDroppedSkin, dp);   // again once it's in their hands
+		return Plugin_Continue;
+	}
+
+	if (!IsValidHuman(client) || !g_Loaded[client])
 		return Plugin_Continue;
 
 	int def = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
@@ -1657,6 +1789,46 @@ void ApplyWeaponSkin(int client, int weapon, int def)
 		ApplyStickers(weapon, s);
 
 	g_EntOwner[weapon] = userid;
+	g_EntPaint[weapon] = s.paint;
+	g_EntSeed[weapon] = s.seed;
+	g_EntWear[weapon] = s.paint != 0 ? GetEntPropFloat(weapon, Prop_Send, "m_flFallbackWear") : 0.0;
+	g_EntStat[weapon] = GetEntProp(weapon, Prop_Send, "m_nFallbackStatTrak");
+	g_EntQuality[weapon] = GetEntProp(weapon, Prop_Send, "m_iEntityQuality");
+	g_EntAccount[weapon] = GetSteamAccountID(client, false);
+}
+
+// Someone picked up a weapon another player dropped: put the dropper's skin
+// back on it with a new item ID, so every client (the new holder included)
+// draws it again instead of a plain one.
+void ShowDroppedSkin(int client, int weapon)
+{
+	if (weapon <= 0 || weapon >= sizeof(g_EntOwner) || g_EntOwner[weapon] <= 0)
+		return;
+	if (g_EntOwner[weapon] == GetClientUserId(client))
+		return;   // their own weapon back
+	static int IDHigh = 1 << 20;
+	SetEntProp(weapon, Prop_Send, "m_iItemIDLow", -1);
+	SetEntProp(weapon, Prop_Send, "m_iItemIDHigh", IDHigh++);
+	if (g_EntPaint[weapon] != 0)
+	{
+		SetEntProp(weapon, Prop_Send, "m_nFallbackPaintKit", g_EntPaint[weapon]);
+		SetEntPropFloat(weapon, Prop_Send, "m_flFallbackWear", g_EntWear[weapon]);
+		SetEntProp(weapon, Prop_Send, "m_nFallbackSeed", g_EntSeed[weapon]);
+	}
+	SetEntProp(weapon, Prop_Send, "m_nFallbackStatTrak", g_EntStat[weapon]);
+	SetEntProp(weapon, Prop_Send, "m_iEntityQuality", g_EntQuality[weapon]);
+	SetEntProp(weapon, Prop_Send, "m_iAccountID", g_EntAccount[weapon]);   // still the dropper's (StatTrak stays theirs)
+	SetEntPropEnt(weapon, Prop_Send, "m_hOwnerEntity", client);
+}
+
+public void Frame_ShowDroppedSkin(DataPack pack)
+{
+	pack.Reset();
+	int client = GetClientOfUserId(pack.ReadCell());
+	int weapon = EntRefToEntIndex(pack.ReadCell());
+	delete pack;
+	if (client > 0 && IsClientInGame(client) && weapon > 0 && IsValidEntity(weapon))
+		ShowDroppedSkin(client, weapon);
 }
 
 /* ---------- Loadout slots (USP-S, M4A1-S, CZ75, R8, MP5-SD) ---------- */
@@ -2934,7 +3106,7 @@ public Action Cmd_Slots(int client, int args)
 void ShowSlotsMenu(int client)
 {
 	Menu menu = new Menu(Handler_Slots);
-	menu.SetTitle("Default weapons\nPick an option to switch it, then Save.");
+	menu.SetTitle("Default weapons\nPick one to switch it - saved as you go (and when you close this).");
 
 	WeaponInfo def, alt;
 	char info[8], line[96];
@@ -2949,15 +3121,27 @@ void ShowSlotsMenu(int client)
 			Format(line, sizeof(line), "%s: %s  (or %s)", g_SlotTitle[i], def.name, alt.name);
 		menu.AddItem(info, line);
 	}
-	menu.AddItem("save", "Save");
-	menu.ExitBackButton = g_SlotsSet[client];
+	menu.AddItem("save", "Done");
+	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+void FinishSlots(int client, bool tell)
+{
+	g_SlotsSet[client] = true;
+	SavePlayer(client);
+	SwapHeldWeapons(client);
+	if (tell)
+		PrintToChat(client, "%sDefault weapons saved. Change them any time with \x04!slots\x01.", PREFIX);
 }
 
 public int Handler_Slots(Menu menu, MenuAction action, int client, int item)
 {
-	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients)
-		SavePlayer(client); // menu closed: auto-save
+	// closed any way (Exit, Back, another menu, Esc): saved and applied, like Done
+	if (action == MenuAction_Cancel && client > 0 && client <= MaxClients && IsClientInGame(client)
+		&& item != MenuCancel_Disconnected && item != MenuCancel_NoDisplay
+		&& !(item == MenuCancel_Interrupted && g_SlotsRedraw[client]))
+		FinishSlots(client, item == MenuCancel_Exit);
 	if (action == MenuAction_End)
 	{
 		delete menu;
@@ -2968,15 +3152,15 @@ public int Handler_Slots(Menu menu, MenuAction action, int client, int item)
 		menu.GetItem(item, info, sizeof(info));
 		if (StrEqual(info, "save"))
 		{
-			g_SlotsSet[client] = true;
-			SavePlayer(client);
-			SwapHeldWeapons(client);
-			PrintToChat(client, "%sDefault weapons saved. Change them any time with \x04!slots\x01.", PREFIX);
+			FinishSlots(client, true);
 			return 0;
 		}
 		int slot = StringToInt(info);
 		g_SlotAltOn[client][slot] = !g_SlotAltOn[client][slot];
+		SavePlayer(client);   // saved straight away too
+		g_SlotsRedraw[client] = true;
 		ShowSlotsMenu(client);
+		g_SlotsRedraw[client] = false;
 	}
 	else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
 	{

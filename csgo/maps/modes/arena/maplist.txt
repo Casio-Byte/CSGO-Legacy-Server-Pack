@@ -1,15 +1,3 @@
-// Standard maps - one map name per line.
-// Installed maps are listed at the top of the !gamemode map menu;
-// missing ones are shown greyed out as (not installed).
-// Edit freely. Lines starting with // are ignored.
-am_must2
-am_dust2
-am_texture2
-am_aztec2
-am_grass2
-am_warehouse2
-am_water
-am_trainyard
-am_skybound
-am_crashz_dust
-am_inferno_banana_dolnma
+// Maps in the Multi-1v1 arenas menus - one map name per line.
+// None by default: add them in CSGO Server Control.exe (Maps tab - paste a Workshop link,
+// or click "Suggested maps..." and tick the ones you want). Lines starting with // are ignored.
