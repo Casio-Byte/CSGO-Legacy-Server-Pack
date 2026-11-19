@@ -274,7 +274,7 @@ Also included: SourceTV demo recording per match and round backups.
   - `!duel` works in arena mode: the two duelists get their own arena each round with their gun, rounds and headshots-only settings until someone wins or forfeits. Everyone else keeps shuffling, and up to 8 duels can run at once.
 - **Maps**: none by default. Suggested ones you can tick in the Maps tab of CSGO Server Control.exe (downloaded from the Steam Workshop):
   - 1v1 duels: aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s
-  - Arenas: am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
+  - Arenas: am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust_v2, am_inferno_banana_dolnma
 
 ### Admin
 - `/login <password>` gives full admin and remembers that PC. `/logout` undoes it.

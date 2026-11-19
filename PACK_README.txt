@@ -228,7 +228,7 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Arenas       none by default - suggested (tick them in the Maps tab):
                am_must2 am_dust2 am_texture2 am_aztec2 am_grass2
                am_warehouse2 am_water am_trainyard am_skybound
-               am_crashz_dust am_inferno_banana_dolnma       (Workshop)
+               am_crashz_dust_v2 am_inferno_banana_dolnma       (Workshop)
 
 The official maps are already installed with the server. The community
 maps (1v1 aim maps and arenas) don't come with CS:GO and nothing is

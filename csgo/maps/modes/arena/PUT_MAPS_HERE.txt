@@ -8,7 +8,7 @@ want. They are downloaded into this folder:
     csgo\maps\modes\arena\
 
 Suggested maps (tick them in the Maps tab):
-    am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
+    am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust_v2, am_inferno_banana_dolnma
 
 Until this mode has at least one map, it is greyed out in !gamemode and !1v1.
 
