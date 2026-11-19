@@ -81,9 +81,6 @@ One program replaces the old `.bat` launchers. It starts and stops the server, s
 **Maps**
 ![Maps tab](docs/screenshots/05_maps.png)
 
-**Maps - Suggested maps**
-![Suggested maps window](docs/screenshots/05b_maps_suggested.png)
-
 **Players**
 ![Players tab with in-game chat](docs/screenshots/06_players.png)
 
