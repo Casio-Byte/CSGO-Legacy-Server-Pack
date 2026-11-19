@@ -1,14 +1,3 @@
-// Standard maps - one map name per line.
-// Installed maps are listed at the top of the !gamemode map menu;
-// missing ones are shown greyed out as (not installed).
-// Edit freely. Lines starting with // are ignored.
-aim_redline
-aim_map
-aim_map_pro
-awp_lego_2
-aim_pillars
-awp_india_csgo
-aim_biove_texture
-aim_crashz_dust_1on1
-aim_map_usp_s
-aim_dust_go
+// Maps in the 1v1 duels menus - one map name per line.
+// None by default: add them in CSGO Server Control.exe (Maps tab - paste a Workshop link,
+// or click "Suggested maps..." and tick the ones you want). Lines starting with // are ignored.

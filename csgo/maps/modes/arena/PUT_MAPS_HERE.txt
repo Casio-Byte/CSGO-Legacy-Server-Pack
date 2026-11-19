@@ -2,12 +2,15 @@ Maps for: Multi-1v1 arenas
 ==========================
 
 This mode only uses multi-1v1 arena (am_) maps from the Steam Workshop.
-download_community_maps.bat downloads them straight from the Workshop
-(start_server.bat runs it for you) into this folder:
+None come with the pack. Add them in CSGO Server Control.exe (Maps tab):
+paste a Workshop link, or click "Suggested maps..." and tick the ones you
+want. They are downloaded into this folder:
     csgo\maps\modes\arena\
 
-Standard maps (maplist.txt, Workshop ids in downloads.txt):
+Suggested maps (tick them in the Maps tab):
     am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
+
+Until this mode has at least one map, it is greyed out in !gamemode and !1v1.
 
 When an admin picks "Multi-1v1 arenas" in !gamemode (or !1v1), the map menu shows
 the maps in this folder, the installed maplist.txt maps, and any
@@ -15,7 +18,7 @@ am_ maps elsewhere on the server (incl. maps\workshop).
 
 To add a Workshop map: put a line in downloads.txt
     <map name>  workshop:<Workshop id>
-and its name in maplist.txt, then run download_community_maps.bat.
+and its name in maplist.txt, then press Start (or use the Maps tab).
 Use original CS:GO uploads - maps updated to CS2 (.vpk) can't load in CS:GO.
 
 You can delete this text file.

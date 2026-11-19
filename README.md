@@ -5,7 +5,7 @@ A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on 
 - **Metamod and SourceMod**, preconfigured.
 - **CS:GO Match**, a match system: ready-up, knife round, pauses, best-of-3 with map veto, every game mode and all 1v1 modes.
 - **CS:GO Loadout**, a skin system: skins, stickers, knives, gloves, agents, patches and default-weapon picks, saved per player.
-- **Helpers**: a first-run setup wizard, a crash-restarting launcher, FastDL map downloads, a community map downloader, and the internet-play fixes from [FNScence/CSGO-Legacy-Server](https://github.com/FNScence/CSGO-Legacy-Server).
+- **Helpers**: CSGO Server Control.exe (setup, a crash-restarting launcher, FastDL map downloads, a community map downloader with suggested maps) and the internet-play fixes from [FNScence/CSGO-Legacy-Server](https://github.com/FNScence/CSGO-Legacy-Server).
 
 > CS:GO is no longer supported by Valve. This pack targets the `csgo_legacy` server build (app 740), 32-bit Windows `srcds.exe`.
 
@@ -44,7 +44,7 @@ A drag-and-drop pack that turns a **CS:GO Legacy (1.38.8.1) dedicated server on 
 
 1. Stop the server.
 2. Drag `csgo/` onto the server folder (for example `C:\csgo-server\`) and choose **Replace**.
-3. Run `csgo\start_server.bat`. The first run starts the **setup wizard** (see below).
+3. Run `csgo\CSGO Server Control.exe`, fill in the **Setup** tab (see below) and press **Start**.
 4. In game, type `/login <admin password>` in chat to become admin.
 
 Check it's running from the server console:
@@ -56,21 +56,23 @@ sm exts list        -> Source Scramble, PTaH, CS:GO SteamFix, REST in Pawn
 sm plugins list     -> CS:GO Match, CS:GO Loadout, eSprays, eItems, NoLobbyReservation
 ```
 
-Updating an existing server: the pack ships a clean `cfg/server.cfg` and an empty `cfg/csgo_match/server_settings.cfg`, so the wizard runs again. Have your server name and passwords ready.
+Updating an existing server: the pack ships a clean `cfg/server.cfg` and an empty `cfg/csgo_match/server_settings.cfg`, so you fill in the Setup tab again. Have your server name and passwords ready. Old `.bat` launchers from an earlier pack (`start_server.bat` and friends) can be deleted.
 
 ---
 
-## Launcher and setup wizard: `start_server.bat`
+## CSGO Server Control.exe
 
-The first run (or `start_server.bat setup`) asks for:
+One program replaces the old `.bat` launchers. It starts and stops the server, shows its console, and has tabs for setup, maps, players, bans, admins, matches and backups. Nothing to install (.NET Framework 4.x is part of Windows).
+
+The **Setup** tab asks for:
 
 - server name, join password, RCON password (left empty, a random one is generated) and admin password (for `/login`)
 - max players, tickrate and port
-- **default game mode** (a numbered menu of all 10 modes) and the **first map** (a menu of that mode's maps marked installed / downloads on start, or type a name; maps that don't suit the mode are refused)
-- **network**: `1` LAN / virtual LAN (Tailscale, ZeroTier) or `2` Internet (asks for a login token, App ID 730)
+- **default game mode** (all 10 modes) and the **first map**
+- **network**: LAN / virtual LAN (Tailscale, ZeroTier) or Internet (asks for a login token, App ID 730)
 - the address players download maps from. In Internet mode your public IP is filled in automatically.
 - auto-download community maps, run FastDL, auto-restart on crash
-- if **players' skin / loadout preferences** from an earlier install are found (left in place by the uninstaller, or in an uninstall backup folder): whether to use / restore them. Saying no moves them to `_old_player_prefs_<date>` instead of deleting them.
+- if **players' skin / loadout preferences** from an earlier install are found: whether to use / restore them. Saying no moves them to `_old_player_prefs_<date>` instead of deleting them.
 
 It writes three files, all ignored by git and private:
 
@@ -80,47 +82,49 @@ It writes three files, all ignored by git and private:
 | `csgo/cfg/csgo_match/server_settings.cfg` | hostname, `sv_password`, `rcon_password`, `match_admin_password`, `sv_lan` |
 | `csgo/cfg/csgo_match/fastdl.cfg` | `sv_downloadurl` |
 
-The wizard **owns** those settings. If `server.cfg` or `autoexec.cfg` also sets any of them, the wizard comments those lines out. An old `sv_lan 1` there is what causes *"This game server restricts clients to connect from internal local area network only"*. In Internet mode it also adds a Windows Firewall rule for the game port.
+The setup **owns** those settings. If `server.cfg` or `autoexec.cfg` also sets any of them, it comments those lines out. An old `sv_lan 1` there is what causes *"This game server restricts clients to connect from internal local area network only"*. In Internet mode it also adds a Windows Firewall rule for the game port.
 
-On every start the launcher:
+On every Start the program:
 1. downloads missing community maps
-2. starts FastDL minimized
+2. starts FastDL
 3. runs `srcds.exe` and restarts it if it crashes
 4. stops FastDL when the server stops
 
 ## Internet play
 
-1. Run `start_server.bat setup`, choose **2**, enter a login token and check the public IP.
+1. In the Setup tab choose **Internet**, enter a login token and check the public IP.
 2. On your router, forward **UDP 27015** (game) and **TCP 27020** (FastDL). Don't forward TCP 27015, which is RCON.
 3. "Server out of date" console warnings are expected.
 4. SteamFix and NoLobbyReservation are already included. The console should show `[steamfix] engine patched!`.
 5. Test from outside your network, for example a phone hotspot. Many routers can't connect to their own public IP (no NAT loopback).
 
-SteamFix means SteamIDs aren't verified, so keep a join password and use `/login` for admin. The alternative with no patches is a virtual LAN (Tailscale or ZeroTier) in setup option 1.
+SteamFix means SteamIDs aren't verified, so keep a join password and use `/login` for admin. The alternative with no patches is a virtual LAN (Tailscale or ZeroTier) with the LAN setting.
 
-## FastDL: `start_fastdl.bat`
+## FastDL
 
-CS:GO's built-in download is too slow for big maps, so the pack runs a small PowerShell HTTP server on **TCP 27020**:
+CS:GO's built-in download is too slow for big maps, so the program runs a small HTTP server on **TCP 27020** (Setup tab, on by default):
 
 - It only serves `maps`, `materials`, `models`, `sound`, `particles` and `resource`, and only map/content file types.
 - Path traversal is blocked.
 - The first run asks for admin once, to add the URL reservation and firewall rule.
 
-## Uninstall: `uninstall_server_pack.bat`
+## Uninstall
 
-This puts the server back to plain CS:GO. It removes:
+The **Uninstall** button in CSGO Server Control.exe
+
+puts the server back to plain CS:GO. It removes:
 - Metamod and SourceMod, including all plugins, extensions and logs (player loadouts: your choice, kept by default)
 - the pack's cfgs
 - `GameModes_Server.txt`
 - the spray images
-- the launcher scripts and their settings
+- the program and its settings
 - optionally, the firewall rules and port permission
 
-Close the server before running it. It lists everything and asks first. By default it **moves** the files to `csgo/_server_pack_backup_<date>` so you can undo it; choosing delete removes them for good. Community maps are kept unless you choose otherwise. **Player skin / loadout preferences** (saved loadouts and `!guns` picks) are kept in place by default, so a reinstall brings everyone's skins back. You can also choose to **keep `start_server.bat`** (with FastDL and the map downloader). The server then still starts the same way, with the same name, passwords and LAN/internet setting, but as plain CS:GO with no plugins; `server.cfg` is set to load your settings. The game, `steam.inf`, the map cycle files and the official maps are never touched.
+Close the server before running it. It lists everything and asks first. By default it **moves** the files to `csgo/_server_pack_backup_<date>` so you can undo it; choosing delete removes them for good. Community maps are kept unless you choose otherwise. **Player skin / loadout preferences** (saved loadouts and `!guns` picks) are kept in place by default, so a reinstall brings everyone's skins back. You can also choose to **keep CSGO Server Control.exe** (with FastDL and the map downloader). The server then still starts the same way, with the same name, passwords and LAN/internet setting, but as plain CS:GO with no plugins; `server.cfg` is set to load your settings. The game, `steam.inf`, the map cycle files and the official maps are never touched.
 
-## Community maps: `download_community_maps.bat`
+## Community maps
 
-This downloads the arena maps listed in each mode's `downloads.txt`, from varq.net or straight from the Steam Workshop (`workshop:<id>` entries). It unpacks them, using 7-Zip if installed, checks each Workshop item really is a map (a wrong ID such as a collection, a removed item or a non-.bsp file is reported, then varq.net is tried), saves it under its real file name in `csgo/maps` (the same place as the official maps, so every map loads the same way) and skips maps you already have. The server only changes to a map whose `.bsp` really exists. A missing map is reported in chat instead of CS:GO quietly loading the closest official map.
+None are included or downloaded by default. In CSGO Server Control.exe's **Maps** tab, click **Suggested maps...** and tick the 1v1 aim maps and arena maps you want, or paste any Steam Workshop map link. Each map is downloaded straight from the Workshop (varq.net as a fallback), checked to really be a map, and saved under its real file name in `csgo/maps` (the same place as the official maps, so every map loads the same way). Ticked maps that go missing are downloaded again on Start. Until 1v1 duels or arenas have at least one map, they are greyed out ("no maps installed") in `!gamemode` and `!1v1`. The server only changes to a map whose `.bsp` really exists.
 
 ---
 
@@ -167,7 +171,7 @@ In every mode there's no team-select screen after a map loads: players are put o
 
 A map in a mode's own folder always counts for that mode. The map menus only list maps that fit, and `!map` on a map that doesn't suit the current mode asks which fitting mode to switch to.
 
-Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. The game only loads maps reliably from `csgo/maps` itself, so `start_server.bat` copies mode-folder maps there before each start (never overwriting existing maps; listed in `maps/modes/copied_to_maps.txt`, removed by the uninstaller), and the plugin copies a newly added one when it's picked. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
+Each mode has a map folder, `csgo/maps/modes/<mode>/`, with a `maplist.txt` of standard maps. The game only loads maps reliably from `csgo/maps` itself, so CSGO Server Control.exe copies mode-folder maps there before each start (never overwriting existing maps; listed in `maps/modes/copied_to_maps.txt`, removed by the uninstaller), and the plugin copies a newly added one when it's picked. `!map` lists every map on the server (A-Z, per mode folder, workshop) and replaces SourceMod's `!map`.
 
 ### Rock the vote: `!rtv`
 Type `!rtv` (or just `rtv`). When 60% of players have (`match_rtv_ratio`), everyone votes between up to 6 maps of the current mode and "Stay"; the winner loads in the same mode. Works in every mode, but **never during a live 5v5 or wingman match** (knife round and side pick included) or a best of 3. Before `!ready` is fine. Opens 30 s after a map loads; after a "stay" result the next vote can start 3 minutes later. `match_rtv_enabled 0` turns it off.
@@ -222,8 +226,8 @@ Also included: SourceTV demo recording per match and round backups.
   - Every arena on the map runs its own 1v1 each round.
   - Players are **shuffled** into new random pairs every round. `!options` → "Arena pairing" switches to a ladder instead (win to move up).
   - `!duel` works in arena mode: the two duelists get their own arena each round with their gun, rounds and headshots-only settings until someone wins or forfeits. Everyone else keeps shuffling, and up to 8 duels can run at once.
-- **Maps** (all downloaded straight from the Steam Workshop by `download_community_maps.bat`):
-  - 1v1 duels: aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s, aim_dust_go
+- **Maps**: none by default. Suggested ones you can tick in the Maps tab of CSGO Server Control.exe (downloaded from the Steam Workshop):
+  - 1v1 duels: aim_redline, aim_map, aim_map_pro, awp_lego_2, aim_pillars, awp_india_csgo, aim_biove_texture, aim_crashz_dust_1on1, aim_map_usp_s
   - Arenas: am_must2, am_dust2, am_texture2, am_aztec2, am_grass2, am_warehouse2, am_water, am_trainyard, am_skybound, am_crashz_dust, am_inferno_banana_dolnma
 
 ### Admin

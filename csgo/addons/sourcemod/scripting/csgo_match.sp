@@ -21,7 +21,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "1.27.1-20261104"
+#define PLUGIN_VERSION "1.33.2-20261117"
 #define PREFIX " \x01[\x04Match\x01] "
 #define CFG_DIR "cfg/csgo_match"
 
@@ -243,6 +243,13 @@ ConVar g_cvDmKillHp;
 StringMap g_DmSaved;      // cvars Deathmatch changed, and their old values
 bool g_DmNoBuy = false;
 bool g_PrematchOn = false;
+int g_RestartCountdown = 0;      // scheduled restart notice: on-screen countdown
+Handle g_RestartTimer = null;
+ConVar g_cvRestartCancelled;
+ConVar g_cvProfile;              // 0 = everything, 1 = Tournament (5v5 + wingman only), 2 = Casual (no 5v5 / wingman)     // set by match_restart_cancel / !cancelrestart; server_control.bat reads it
+StringMap g_TeamLock = null;     // player key (STEAM_0:x:y) -> 0 / 1   (teams made in server_control.bat)
+char g_LockName[2][64];
+bool g_TeamsLocked = false;
 bool g_PracCleanup = false; // practice settings (sv_cheats, impacts...) need undoing when it ends // the no-warmup "waiting for !ready" / duel lobby round is set up   // Deathmatch fixed loadout is on (checked every frame, so cached)
 bool g_BootModeDone = false;
 
@@ -261,7 +268,8 @@ char g_RegisteredCmds[][] =
 	"guns", "sitout", "rank", "maps", "changemap",
 	"bo3", "bo1", "veto", "series", "maps3", "endseries", "cancelseries",
 	"rtv", "rockthevote", "unrtv",
-	"rtg", "rockthegamemode", "rockthemode", "unrtg", "rock"
+	"rtg", "rockthegamemode", "rockthemode", "unrtg", "rock",
+	"cancelrestart", "teams"
 };
 
 /* ------------------------------------------------------------------ */
@@ -542,6 +550,9 @@ public void OnPluginStart()
 	HookEvent("round_freeze_end", Event_RoundFreezeEnd);
 	HookEvent("player_spawn", Event_PlayerSpawn);
 	HookEvent("cs_win_panel_match", Event_MatchEnd);
+	HookEvent("player_hurt", Event_StatsHurt);
+	RegServerCmd("match_players", Cmd_Players, "match_players - one line per player (for CSGO Server Control.exe)");
+	RegServerCmd("match_move", Cmd_Move, "match_move <userid> <1 spec / 2 T / 3 CT> - moves a player");
 	HookEvent("announce_phase_end", Event_PhaseEnd);
 	HookEvent("player_death", Event_DuelDeath);
 	HookEvent("player_death", Event_DmKillHeal);
@@ -552,6 +563,22 @@ public void OnPluginStart()
 	for (int i = 0; i < 3; i++)
 		g_SeriesResult[i] = -1;
 	AddCommandListener(Listener_JoinTeam, "jointeam");
+	AddCommandListener(Listener_CallVote, "callvote");
+	RegServerCmd("match_restart_cancel", Cmd_RestartCancel, "match_restart_cancel - cancels the coming scheduled restart (server_control.bat moves it to the next interval)");
+	RegServerCmd("match_teams_load", Cmd_TeamsLoad, "match_teams_load - locks the teams in cfg/csgo_match/teams.txt (made in server_control.bat)");
+	RegServerCmd("match_teams_clear", Cmd_TeamsClear, "match_teams_clear - unlocks the teams");
+	RegServerCmd("match_gamemode", Cmd_ServerGamemode, "match_gamemode <0-9> <map> - switches mode + map now (0 5v5, 1 wingman, 2 casual, 3 DM, 4 arms race, 5 demolition, 6 practice, 7 1v1, 8 arenas, 9 retakes)");
+	RegServerCmd("match_teams", Cmd_TeamsShow, "match_teams - shows the locked teams");
+	// Not saved in csgo_match.cfg: it comes from the launch options (-match_profile)
+	// and server_control.bat can change it live.
+	g_cvProfile = CreateConVar("match_server_profile", "0", "0 = every mode, 1 = Tournament (only Competitive 5v5 and Wingman), 2 = Casual (every mode except Competitive 5v5 / Wingman)", FCVAR_DONTRECORD, true, 0.0, true, 2.0);
+	char profileArg[8];
+	if (GetCommandLineParam("-match_profile", profileArg, sizeof(profileArg)))
+		g_cvProfile.SetString(profileArg);
+	g_cvProfile.AddChangeHook(OnProfileChanged);
+	g_cvRestartCancelled = CreateConVar("match_restart_cancelled", "0", "1 = the coming scheduled restart was cancelled (server_control.bat resets it)", FCVAR_DONTRECORD, true, 0.0, true, 1.0);
+	g_TeamLock = new StringMap();
+	RegServerCmd("match_restart_notice", Cmd_RestartNotice, "match_restart_notice <seconds> - tells players the server restarts soon (server_control.bat uses it)");
 	UserMsg vgui = GetUserMessageId("VGUIMenu");
 	if (vgui != INVALID_MESSAGE_ID)
 		HookUserMessage(vgui, UserMsg_VGUIMenu, true);
@@ -587,6 +614,8 @@ public void OnPluginStart()
 
 public void OnConfigsExecuted()
 {
+	// CSGO Server Control.exe watches for this line: the map is loaded and the server is up.
+	CreateTimer(1.0, Timer_ServerReady, _, TIMER_FLAG_NO_MAPCHANGE);
 	// Server name, passwords and LAN/internet from start_server.bat's first-run setup.
 	if (FileExists("cfg/csgo_match/server_settings.cfg"))
 		ServerCommand("exec csgo_match/server_settings.cfg");
@@ -594,8 +623,22 @@ public void OnConfigsExecuted()
 	// No end-of-match map vote in any mode - the plugin (or !map / !gamemode)
 	// decides what comes next.
 	ServerCommand("mp_endmatch_votenextmap 0");
+	// No vote kicks in any mode.
+	ServerCommand("sv_vote_issue_kick_allowed 0");
+	// keep the chat / event logs for CSGO Server Control.exe small
+	if (FileSize("addons/sourcemod/data/csgo_match_chat.log") > 2000000)
+		DeleteFile("addons/sourcemod/data/csgo_match_chat.log");
+	if (FileSize("addons/sourcemod/data/csgo_match_events.log") > 1000000)
+		DeleteFile("addons/sourcemod/data/csgo_match_events.log");
+	// Bans made in CSGO Server Control.exe (Bans tab) or with sm_ban.
+	if (FileExists("cfg/banned_user.cfg"))
+		ServerCommand("exec banned_user.cfg");
 	LoadSavedOptions();
 	g_KnifeEnabled = g_cvKnifeDefault.BoolValue;
+	// Locked teams survive map changes and restarts (teams.txt "active" "1").
+	g_TeamsLocked = LoadTeamsFile(true);
+	if (g_TeamsLocked)
+		CreateTimer(3.0, Timer_LockedNames, _, TIMER_FLAG_NO_MAPCHANGE);
 	ApplyBootMode();
 	ApplyModeOnMapStart();
 }
@@ -629,6 +672,7 @@ void ApplyBootMode()
 
 public void OnMapEnd()
 {
+	g_RestartTimer = null; // TIMER_FLAG_NO_MAPCHANGE ends it
 	g_DmNoBuy = false; // set again by DmApply if the next map is Deathmatch too
 	g_VetoTimer = null;     // killed by TIMER_FLAG_NO_MAPCHANGE
 	if (g_VetoRunning)
@@ -720,6 +764,7 @@ public Action Command_Generic(int client, int args)
 
 public void OnClientSayCommand_Post(int client, const char[] command, const char[] sArgs)
 {
+	LogChat(client, command, sArgs);
 	if (client > 0 && (StrEqual(sArgs, "rtv", false) || StrEqual(sArgs, "rockthevote", false)
 		|| StrEqual(sArgs, "rock the vote", false)))
 	{
@@ -879,6 +924,8 @@ void Dispatch(int client, const char[] cmd, const char[] arg)
 	else if (Is(cmd, "bo3") || Is(cmd, "veto"))                          Cmd_Bo3(client);
 	else if (Is(cmd, "bo1"))                                             Cmd_Bo1(client);
 	else if (Is(cmd, "endseries") || Is(cmd, "cancelseries"))            Cmd_EndSeries(client);
+	else if (Is(cmd, "cancelrestart"))                                   { if (RequireAdmin(client)) CancelRestart(client); }
+	else if (Is(cmd, "teams"))                                           ShowLockedTeams(client);
 	// rock the vote
 	else if (Is(cmd, "rtv") || Is(cmd, "rockthevote"))                   Cmd_Rtv(client, true, false);
 	else if (Is(cmd, "unrtv"))                                           Cmd_Rtv(client, false, false);
@@ -991,6 +1038,8 @@ void StartLive()
 	if (g_cvFriendlyFire.IntValue >= 0)
 		ServerCommand("mp_friendlyfire %d", g_cvFriendlyFire.IntValue);
 	ServerCommand("mp_backup_round_file \"%s\"", g_BackupPrefix);
+	ResetMatchStats();
+	CreateTimer(3.0, Timer_LogMatchStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	// Only mp_maxrounds ends a match; the plugin handles what comes next.
 	ServerCommand("mp_timelimit 0");
 	ServerCommand("mp_endmatch_votenextmap 0");
@@ -1380,6 +1429,8 @@ void Cmd_Help(int client)
 		Reply(client, "\x04Arenas:\x01 !guns !sitout !rank — !duel gets you your own arena");
 	if (CurrentMode() == GM_Retakes)
 		Reply(client, "\x04Retakes:\x01 !guns (your guns for pistol / eco / half buy / full buy rounds)");
+	if (g_TeamsLocked)
+		Reply(client, "\x04Teams:\x01 !teams (the locked teams)");
 	Reply(client, "\x04Skins:\x01 !ws !presets !knife !gloves !agents !stickers");
 	Reply(client, "\x04Votes:\x01 !rtv (new map) !rtg (new game mode) - not during a live match");
 	if (admin)
@@ -1575,7 +1626,7 @@ void Cmd_Restore(int client, const char[] arg)
 
 void Cmd_Prac(int client)
 {
-	if (!RequireAdmin(client))
+	if (!RequireAdmin(client) || !CheckGmAllowed(client, GM_Practice))
 		return;
 	if (g_State == State_Live || g_State == State_Knife || g_State == State_SideSelect || g_State == State_Duel)
 	{
@@ -1863,6 +1914,7 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
 		return;
 	}
 
+	WriteMatchHistory();
 	g_State = State_None;
 	g_Paused = false;
 	CreateTimer(10.0, Timer_StopDemo, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -1882,6 +1934,8 @@ public void Event_MatchEnd(Event event, const char[] name, bool dontBroadcast)
    from !rtv) would then start one. This pack never uses the game's warmup. */
 void NoWarmup()
 {
+	// Also run after every mode cfg: players can't vote to kick anyone, in any mode.
+	ServerCommand("sv_vote_issue_kick_allowed 0");
 	ServerCommand("mp_do_warmup_period 0");
 	ServerCommand("mp_warmuptime 0");
 	ServerCommand("mp_warmup_pausetimer 0");
@@ -2699,6 +2753,466 @@ public void Frame_EndDuelAfterLeave(int serial)
 		EndDuel("");
 }
 
+/* ---------- Scheduled restart announcement (server console / RCON) ---------- */
+
+public Action Cmd_RestartNotice(int args)
+{
+	char arg[16];
+	GetCmdArg(1, arg, sizeof(arg));
+	int secs = args >= 1 ? StringToInt(arg) : 0;
+
+	char when[48];
+	if (secs <= 0)
+		strcopy(when, sizeof(when), "now - rejoin in a minute");
+	else if (secs >= 120)
+		Format(when, sizeof(when), "in %d minutes", secs / 60);
+	else if (secs >= 60)
+		strcopy(when, sizeof(when), "in 1 minute");
+	else
+		Format(when, sizeof(when), "in %d seconds", secs);
+
+	Announce("\x02Scheduled server restart\x01 %s.", when);
+	PrintCenterTextAll("Server restart %s", when);
+	PrintToServer("[Match] Restart notice sent: %s", when);
+
+	// Last 10 seconds: a countdown in the middle of the screen.
+	delete g_RestartTimer;
+	if (secs > 0 && secs <= 10)
+	{
+		g_RestartCountdown = secs;
+		g_RestartTimer = CreateTimer(1.0, Timer_RestartCountdown, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	}
+	return Plugin_Handled;
+}
+
+public Action Timer_RestartCountdown(Handle timer)
+{
+	if (--g_RestartCountdown <= 0)
+	{
+		PrintCenterTextAll("Server restarting...");
+		g_RestartTimer = null;
+		return Plugin_Stop;
+	}
+	PrintCenterTextAll("Server restart in %d", g_RestartCountdown);
+	return Plugin_Continue;
+}
+
+public Action Timer_LockedNames(Handle timer)
+{
+	if (!g_SeriesActive)
+		ApplyLockedTeamNames();
+	return Plugin_Stop;
+}
+
+public Action Cmd_RestartCancel(int args)
+{
+	CancelRestart(0);
+	return Plugin_Handled;
+}
+
+void CancelRestart(int client)
+{
+	g_cvRestartCancelled.BoolValue = true;
+	delete g_RestartTimer;
+	if (client > 0)
+		Announce("%N \x04cancelled the scheduled server restart\x01.", client);
+	else
+		Announce("\x04The scheduled server restart was cancelled\x01.");
+	PrintCenterTextAll("Server restart cancelled");
+	PrintToServer("[Match] Scheduled restart cancelled.");
+}
+
+/* ---------- Locked teams (made in server_control.bat's Teams page) ---------- */
+
+void GetTeamsFilePath(char[] path, int maxlen)
+{
+	strcopy(path, maxlen, "cfg/csgo_match/teams.txt");
+}
+
+void NormalizeSteamKey(char[] key)
+{
+	if (strncmp(key, "STEAM_1", 7) == 0)
+		key[6] = '0';
+}
+
+// Reads teams.txt. Returns false if missing / empty.
+bool LoadTeamsFile(bool requireActive)
+{
+	char path[PLATFORM_MAX_PATH];
+	GetTeamsFilePath(path, sizeof(path));
+	if (!FileExists(path))
+		return false;
+	KeyValues kv = new KeyValues("Teams");
+	if (!kv.ImportFromFile(path))
+	{
+		delete kv;
+		return false;
+	}
+	if (requireActive && kv.GetNum("active", 0) == 0)
+	{
+		delete kv;
+		return false;
+	}
+	g_TeamLock.Clear();
+	int count = 0;
+	char sec[8], key[64];
+	for (int t = 0; t < 2; t++)
+	{
+		Format(sec, sizeof(sec), "team%d", t + 1);
+		strcopy(g_LockName[t], sizeof(g_LockName[]), t == 0 ? "Team 1" : "Team 2");
+		if (!kv.JumpToKey(sec))
+			continue;
+		kv.GetString("name", g_LockName[t], sizeof(g_LockName[]), t == 0 ? "Team 1" : "Team 2");
+		CleanTeamName(g_LockName[t], sizeof(g_LockName[]));
+		if (kv.JumpToKey("players") && kv.GotoFirstSubKey(false))
+		{
+			do
+			{
+				kv.GetSectionName(key, sizeof(key));
+				NormalizeSteamKey(key);
+				if (StrContains(key, "STEAM_", false) == 0)
+				{
+					g_TeamLock.SetValue(key, t);
+					count++;
+				}
+			} while (kv.GotoNextKey(false));
+			kv.GoBack();
+			kv.GoBack();
+		}
+		kv.GoBack();
+	}
+	delete kv;
+	return count > 0;
+}
+
+int LockedTeamOf(int client)
+{
+	if (!g_TeamsLocked || IsFakeClient(client))
+		return -1;
+	char key[64];
+	int team;
+	GetLoginKey(client, key, sizeof(key));
+	if (g_TeamLock.GetValue(key, team))
+		return team;
+	return -2; // not on either team
+}
+
+// Which side (CT/T) a locked team is on now: where its players are, else
+// team 1 starts CT (knife round / halftime swaps are followed by counting).
+int LockedSideOf(int team, int exclude)
+{
+	int ct = 0, t = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == exclude || !IsClientInGame(i) || LockedTeamOf(i) != team)
+			continue;
+		if (GetClientTeam(i) == CS_TEAM_CT) ct++;
+		else if (GetClientTeam(i) == CS_TEAM_T) t++;
+	}
+	if (ct != t)
+		return ct > t ? CS_TEAM_CT : CS_TEAM_T;
+	int oct = 0, ot = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i == exclude || !IsClientInGame(i) || LockedTeamOf(i) != 1 - team)
+			continue;
+		if (GetClientTeam(i) == CS_TEAM_CT) oct++;
+		else if (GetClientTeam(i) == CS_TEAM_T) ot++;
+	}
+	if (oct != ot)
+		return oct > ot ? CS_TEAM_T : CS_TEAM_CT;
+	return team == 0 ? CS_TEAM_CT : CS_TEAM_T;
+}
+
+void ApplyLockedTeamNames()
+{
+	if (!g_TeamsLocked || !IsMatchMode())
+		return;
+	int onCT = LockedSideOf(0, 0) == CS_TEAM_CT ? 0 : 1;
+	ServerCommand("mp_teamname_1 \"%s\"", g_LockName[onCT]);
+	ServerCommand("mp_teamname_2 \"%s\"", g_LockName[1 - onCT]);
+}
+
+// Puts a player where the locked teams say (5v5 / wingman only).
+Action LockJoinTeam(int client)
+{
+	int team = LockedTeamOf(client);
+	if (team == -1 || !IsMatchMode())
+		return Plugin_Continue;
+	char arg[8];
+	GetCmdArg(1, arg, sizeof(arg));
+	int wanted = StringToInt(arg);
+	if (team == -2)
+	{
+		if (wanted != CS_TEAM_SPECTATOR)
+			PrintToChat(client, "%sThe teams are locked (\x04%s\x01 vs \x04%s\x01) and you're not on either - you can spectate.", PREFIX, g_LockName[0], g_LockName[1]);
+		if (GetClientTeam(client) != CS_TEAM_SPECTATOR)
+			ChangeClientTeam(client, CS_TEAM_SPECTATOR);
+		return Plugin_Handled;
+	}
+	if (wanted == CS_TEAM_SPECTATOR)
+		return Plugin_Continue;
+	int side = LockedSideOf(team, client);
+	if (wanted == side)
+		return Plugin_Continue;
+	if (GetClientTeam(client) != side)
+		ChangeClientTeam(client, side);
+	PrintToChat(client, "%sYou're on \x04%s\x01 - they're on %s.", PREFIX, g_LockName[team], side == CS_TEAM_CT ? "CT" : "T");
+	return Plugin_Handled;
+}
+
+void PlaceLockedPlayers()
+{
+	if (!g_TeamsLocked || !IsMatchMode())
+		return;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || IsFakeClient(i))
+			continue;
+		int team = LockedTeamOf(i);
+		if (team == -2)
+		{
+			if (GetClientTeam(i) == CS_TEAM_CT || GetClientTeam(i) == CS_TEAM_T)
+				ChangeClientTeam(i, CS_TEAM_SPECTATOR);
+		}
+		else if (team >= 0)
+		{
+			int side = team == 0 ? CS_TEAM_CT : CS_TEAM_T;
+			if (GetClientTeam(i) != side)
+				ChangeClientTeam(i, side);
+		}
+	}
+	ApplyLockedTeamNames();
+}
+
+public Action Cmd_TeamsLoad(int args)
+{
+	if (!LoadTeamsFile(false))
+	{
+		PrintToServer("[Match] No teams in cfg/csgo_match/teams.txt - nothing locked.");
+		return Plugin_Handled;
+	}
+	g_TeamsLocked = true;
+	if (g_State == State_Warmup || g_State == State_None)
+		PlaceLockedPlayers();
+	Announce("Teams locked: \x04%s\x01 vs \x04%s\x01. Type \x04!teams\x01 to see them.", g_LockName[0], g_LockName[1]);
+	PrintToServer("[Match] Teams locked: %s vs %s.", g_LockName[0], g_LockName[1]);
+	return Plugin_Handled;
+}
+
+public Action Cmd_TeamsClear(int args)
+{
+	g_TeamsLocked = false;
+	g_TeamLock.Clear();
+	ServerCommand("mp_teamname_1 \"\"");
+	ServerCommand("mp_teamname_2 \"\"");
+	Announce("The teams are \x04unlocked\x01 - everyone can pick a side again.");
+	PrintToServer("[Match] Teams unlocked.");
+	return Plugin_Handled;
+}
+
+public Action Cmd_TeamsShow(int args)
+{
+	ShowLockedTeams(0);
+	return Plugin_Handled;
+}
+
+void ShowLockedTeams(int client)
+{
+	if (!g_TeamsLocked)
+	{
+		if (client == 0) PrintToServer("[Match] Teams aren't locked.");
+		else Reply(client, "The teams aren't locked - everyone picks their own side.");
+		return;
+	}
+	for (int t = 0; t < 2; t++)
+	{
+		char line[256];
+		Format(line, sizeof(line), "%s:", g_LockName[t]);
+		int n = 0;
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i) && LockedTeamOf(i) == t)
+			{
+				Format(line, sizeof(line), "%s %N", line, i);
+				n++;
+			}
+		}
+		StringMapSnapshot snap = g_TeamLock.Snapshot();
+		int total = 0, v;
+		char key[64];
+		for (int k = 0; k < snap.Length; k++)
+		{
+			snap.GetKey(k, key, sizeof(key));
+			if (g_TeamLock.GetValue(key, v) && v == t) total++;
+		}
+		delete snap;
+		Format(line, sizeof(line), "%s  (%d of %d here)", line, n, total);
+		if (client == 0) PrintToServer("[Match] %s", line);
+		else Reply(client, "\x04%s", line);
+	}
+}
+
+/* ---------- For CSGO Server Control.exe: players, chat, match history ---------- */
+
+public Action Timer_ServerReady(Handle timer)
+{
+	char map[PLATFORM_MAX_PATH];
+	GetCurrentMap(map, sizeof(map));
+	PrintToServer("[Match] Server ready on %s", map);
+	return Plugin_Stop;
+}
+
+public Action Cmd_Players(int args)
+{
+	char name[MAX_NAME_LENGTH], auth[32];
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || IsClientSourceTV(i))
+			continue;
+		bool bot = IsFakeClient(i);
+		GetClientName(i, name, sizeof(name));
+		ReplaceString(name, sizeof(name), "\t", " ");
+		if (bot || !GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth), false))
+			strcopy(auth, sizeof(auth), bot ? "BOT" : "?");
+		int ping = bot ? 0 : RoundToNearest(GetClientAvgLatency(i, NetFlow_Outgoing) * 1000.0);
+		int secs = bot ? 0 : RoundToFloor(GetClientTime(i));
+		PrintToServer("P\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s", GetClientUserId(i), bot ? 1 : 0, GetClientTeam(i),
+			GetClientFrags(i), GetClientDeaths(i), CS_GetClientAssists(i), ping, secs, IsPlayerAlive(i) ? 1 : 0, auth, name);
+	}
+	return Plugin_Handled;
+}
+
+public Action Cmd_Move(int args)
+{
+	if (args < 2) { PrintToServer("[Match] Usage: match_move <userid> <1 spec / 2 T / 3 CT>"); return Plugin_Handled; }
+	char a[16];
+	GetCmdArg(1, a, sizeof(a)); int client = GetClientOfUserId(StringToInt(a));
+	GetCmdArg(2, a, sizeof(a)); int team = StringToInt(a);
+	if (client <= 0 || !IsClientInGame(client) || team < 1 || team > 3) { PrintToServer("[Match] No such player / team."); return Plugin_Handled; }
+	ChangeClientTeam(client, team);
+	PrintToChat(client, "%sAn admin moved you to %s.", PREFIX, team == 1 ? "spectators" : team == 2 ? "T" : "CT");
+	PrintToServer("[Match] Moved %N.", client);
+	return Plugin_Handled;
+}
+
+void LogChat(int client, const char[] command, const char[] text)
+{
+	if (client <= 0 || !IsClientInGame(client) || IsFakeClient(client) || text[0] == '\0' || text[0] == '/')
+		return;
+	File f = OpenFile("addons/sourcemod/data/csgo_match_chat.log", "a");
+	if (f == null)
+		return;
+	char time[16], name[MAX_NAME_LENGTH], msg[256];
+	FormatTime(time, sizeof(time), "%H:%M:%S");
+	GetClientName(client, name, sizeof(name));
+	strcopy(msg, sizeof(msg), text);
+	ReplaceString(name, sizeof(name), "\t", " ");
+	ReplaceString(msg, sizeof(msg), "\t", " ");
+	int team = GetClientTeam(client);
+	f.WriteLine("%s\t%s\t%s\t%s", time, StrEqual(command, "say_team") ? (team == 2 ? "T" : team == 3 ? "CT" : "SPEC") : "ALL", name, msg);
+	delete f;
+}
+
+int g_Damage[MAXPLAYERS + 1];
+
+void ResetMatchStats()
+{
+	for (int i = 0; i <= MaxClients; i++)
+		g_Damage[i] = 0;
+}
+
+public void Event_StatsHurt(Event event, const char[] name, bool dontBroadcast)
+{
+	if (g_State != State_Live)
+		return;
+	int attacker = GetClientOfUserId(event.GetInt("attacker"));
+	int victim = GetClientOfUserId(event.GetInt("userid"));
+	if (attacker <= 0 || attacker == victim || victim <= 0 || !IsClientInGame(attacker) || !IsClientInGame(victim)
+		|| GetClientTeam(attacker) == GetClientTeam(victim))
+		return;
+	int dmg = event.GetInt("dmg_health");
+	if (dmg > 100) dmg = 100;
+	g_Damage[attacker] += dmg;
+}
+
+void TeamLabel(int side, char[] out, int maxlen)
+{
+	ConVar cv = FindConVar(side == CS_TEAM_CT ? "mp_teamname_1" : "mp_teamname_2");
+	if (cv != null) cv.GetString(out, maxlen);
+	if (out[0] == '\0') strcopy(out, maxlen, side == CS_TEAM_CT ? "CT" : "T");
+	ReplaceString(out, maxlen, "\t", " ");
+}
+
+void EventLine(const char[] line)
+{
+	File f = OpenFile("addons/sourcemod/data/csgo_match_events.log", "a");
+	if (f == null)
+		return;
+	f.WriteLine("%d\t%s", GetTime(), line);
+	delete f;
+}
+
+public Action Timer_LogMatchStart(Handle timer)
+{
+	if (g_State != State_Live)
+		return Plugin_Stop;
+	char a[64], b[64], map[PLATFORM_MAX_PATH], line[256];
+	TeamLabel(CS_TEAM_CT, a, sizeof(a)); TeamLabel(CS_TEAM_T, b, sizeof(b));
+	GetCurrentMap(map, sizeof(map)); GetMapDisplayName(map, map, sizeof(map));
+	Format(line, sizeof(line), "START\t%s\t%s\t%s", a, b, map);
+	EventLine(line);
+	return Plugin_Stop;
+}
+
+// One block per finished match in addons/sourcemod/data/csgo_match_history.txt (Matches tab).
+void WriteMatchHistory()
+{
+	char a[64], b[64], map[PLATFORM_MAX_PATH], mode[40], line[512], name[MAX_NAME_LENGTH], auth[32];
+	TeamLabel(CS_TEAM_CT, a, sizeof(a)); TeamLabel(CS_TEAM_T, b, sizeof(b));
+	GetCurrentMap(map, sizeof(map)); GetMapDisplayName(map, map, sizeof(map));
+	GetModeName(mode, sizeof(mode));
+	int sa = CS_GetTeamScore(CS_TEAM_CT), sb = CS_GetTeamScore(CS_TEAM_T);
+	int rounds = sa + sb; if (rounds < 1) rounds = 1;
+	Format(line, sizeof(line), "END\t%s\t%d\t%s\t%d\t%s", a, sa, b, sb, map);
+	EventLine(line);
+	File f = OpenFile("addons/sourcemod/data/csgo_match_history.txt", "a");
+	if (f == null)
+		return;
+	f.WriteLine("MATCH\t%d\t%s\t%s\t%s\t%d\t%s\t%d\t%d", GetTime(), map, mode, a, sa, b, sb, rounds);
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || IsFakeClient(i))
+			continue;
+		int team = GetClientTeam(i);
+		if (team != CS_TEAM_CT && team != CS_TEAM_T)
+			continue;
+		if (!GetClientAuthId(i, AuthId_Steam2, auth, sizeof(auth), false))
+			strcopy(auth, sizeof(auth), "?");
+		GetClientName(i, name, sizeof(name));
+		ReplaceString(name, sizeof(name), "\t", " ");
+		f.WriteLine("PLAYER\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d", auth, name, team == CS_TEAM_CT ? "A" : "B",
+			GetClientFrags(i), GetClientDeaths(i), CS_GetClientAssists(i), g_Damage[i], CS_GetMVPCount(i));
+	}
+	f.WriteLine("ENDMATCH");
+	delete f;
+}
+
+/* ---------- No vote kicks ---------- */
+
+public Action Listener_CallVote(int client, const char[] command, int argc)
+{
+	char issue[32];
+	GetCmdArg(1, issue, sizeof(issue));
+	if (StrContains(issue, "kick", false) == 0)
+	{
+		if (client > 0 && IsClientInGame(client))
+			PrintToChat(client, "%sVote kicking is switched off on this server.", PREFIX);
+		return Plugin_Handled;
+	}
+	return Plugin_Continue;
+}
+
 /* ---------- Skip the team-select screen ---------- */
 
 public Action UserMsg_VGUIMenu(UserMsg msg_id, Handle msg, const int[] players, int playersNum, bool reliable, bool init)
@@ -2779,6 +3293,8 @@ public Action Listener_JoinTeam(int client, const char[] command, int argc)
 		return Plugin_Continue;
 	if (g_State == State_Arena)
 		return ArenaJoinTeam(client);
+	if (g_TeamsLocked && g_State != State_Duel && !(g_SeriesActive || g_VetoRunning))
+		return LockJoinTeam(client);
 	if (g_State != State_Duel)
 		return SeriesJoinTeam(client);
 
@@ -2858,8 +3374,8 @@ char g_GmDefaultMaps[GM_COUNT][] =
 	"ar_baggage ar_shoots ar_monastery ar_pool_day",
 	"de_lake de_safehouse de_bank de_shortnuke",
 	"de_mirage de_inferno de_dust2 de_nuke de_ancient",
-	"aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars awp_india_csgo aim_biove_texture aim_crashz_dust_1on1 aim_map_usp_s aim_dust_go",
-	"am_must2 am_dust2 am_texture2 am_aztec2 am_grass2 am_warehouse2 am_water am_trainyard am_skybound am_crashz_dust am_inferno_banana_dolnma",
+	"",   // 1v1 and arena: no community maps built in - add them from the Workshop (CSGO Server Control.exe, Maps tab)
+	"",
 	"de_dust2 de_mirage de_inferno de_nuke de_overpass de_vertigo de_ancient de_anubis de_train de_cache"
 };
 // Older packs' default lists, replaced automatically (edited lists are left alone).
@@ -3272,6 +3788,7 @@ void ApplyModeOnMapStart()
 	if (!g_PracticeNext)
 		PracticeCleanup();
 	CreateTimer(12.0, Timer_CheckMapFit, _, TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(3.0, Timer_EnforceProfile, _, TIMER_FLAG_NO_MAPCHANGE);
 	if (g_PracticeNext)
 	{
 		EnterPractice();
@@ -3506,6 +4023,16 @@ void CollectModeMaps(int gm, ArrayList paths, bool keepCurrent = false)
 	delete tmp;
 }
 
+// Does this mode have at least one installed map to play? (Used to grey out menu entries.)
+bool GmHasMaps(int gm)
+{
+	ArrayList maps = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+	CollectModeMaps(gm, maps, true);
+	bool any = maps.Length > 0;
+	delete maps;
+	return any;
+}
+
 bool OpenVote(Menu vote, const char[] announce)
 {
 	if (!vote.DisplayVoteToAll(20))
@@ -3544,6 +4071,8 @@ void StartMapVote(int gm)
 		if (!MapFitsMode(target, path))
 			maps.Erase(i);
 	}
+	// The vote pool picked in CSGO Server Control.exe (maps/modes/<folder>/votepool.txt), if any.
+	ApplyVotePool(target, maps);
 	bool currentFits = modeChange && MapFitsMode(target, current);
 	if (maps.Length == 0 && !currentFits)
 	{
@@ -3614,7 +4143,7 @@ void StartModeVote()
 	ArrayList modes = new ArrayList();
 	for (int gm = 0; gm < GM_COUNT; gm++)
 	{
-		if (gm == current)
+		if (gm == current || !GmAllowed(gm))
 			continue;
 		if (gm == GM_Retakes && FindConVar("sm_retakes_enabled") == null)
 			continue; // retakes.smx not loaded
@@ -3947,7 +4476,12 @@ void ShowGameModeMenu(int client)
 	GetCurrentMap(map, sizeof(map));
 
 	Menu menu = new Menu(Handler_GameMode);
-	menu.SetTitle("Game mode\nNow: %s on %s", mode, map);
+	char profile[16];
+	GetProfileName(profile, sizeof(profile));
+	if (g_cvProfile.IntValue == 0)
+		menu.SetTitle("Game mode\nNow: %s on %s", mode, map);
+	else
+		menu.SetTitle("Game mode (%s server)\nNow: %s on %s", profile, mode, map);
 
 	int current = CurrentMode();
 	for (int i = 0; i < GM_COUNT; i++)
@@ -3963,9 +4497,20 @@ void ShowGameModeMenu(int client)
 			StrCat(line, sizeof(line), " (!duel lobby)");
 		else if (i == GM_Retakes)
 			StrCat(line, sizeof(line), " (!guns loadouts)");
-		menu.AddItem(info, line);
+		if (!GmAllowed(i))
+		{
+			StrCat(line, sizeof(line), " - locked");
+			menu.AddItem(info, line, ITEMDRAW_DISABLED);
+		}
+		else if (i != current && !GmHasMaps(i))
+		{
+			StrCat(line, sizeof(line), " - no maps installed");
+			menu.AddItem(info, line, ITEMDRAW_DISABLED);
+		}
+		else
+			menu.AddItem(info, line);
 	}
-	menu.AddItem("options", "Match options...");
+	menu.AddItem("options", g_cvProfile.IntValue == 2 ? "Options (arena pairing)..." : "Match options...");
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
@@ -4019,6 +4564,9 @@ bool MapFitsMode(int gm, const char[] path)
 	if (gm < 0)
 		return true;
 	if (ModeOfMapPath(path) == gm || MapInModeFolder(gm, path))
+		return true;
+	// listed for this mode (retakes maps still need their spawns)
+	if (MapInModeList(gm, path) && (gm != GM_Retakes || RetakesHasSpawns(path)))
 		return true;
 	int want = FittingModeForMap(path);
 	if (want == -2)
@@ -4130,8 +4678,140 @@ public int Handler_ModeMap(Menu menu, MenuAction action, int client, int item)
 	return 0;
 }
 
+/* ---------- Server profile: Tournament / Casual ---------- */
+
+bool GmAllowed(int gm)
+{
+	int profile = g_cvProfile.IntValue;
+	bool comp = gm == GM_Competitive || gm == GM_Wingman;
+	if (profile == 1) return comp;
+	if (profile == 2) return !comp;
+	return true;
+}
+
+void GetProfileName(char[] out, int maxlen)
+{
+	int profile = g_cvProfile.IntValue;
+	strcopy(out, maxlen, profile == 1 ? "Tournament" : (profile == 2 ? "Casual" : "Everything"));
+}
+
+// Tells the player why, returns false when the server profile locks that mode.
+bool CheckGmAllowed(int client, int gm)
+{
+	if (GmAllowed(gm))
+		return true;
+	if (client > 0)
+	{
+		if (g_cvProfile.IntValue == 1)
+			Reply(client, "This is a \x04Tournament\x01 server - only Competitive 5v5 and Wingman 2v2.");
+		else
+			Reply(client, "This is a \x04Casual\x01 server - Competitive 5v5 and Wingman (and their match settings) are switched off.");
+	}
+	else
+		PrintToServer("[Match] The server profile doesn't allow %s.", gm >= 0 && gm < GM_COUNT ? g_GmName[gm] : "that mode");
+	return false;
+}
+
+public void OnProfileChanged(ConVar cv, const char[] oldValue, const char[] newValue)
+{
+	char name[16];
+	GetProfileName(name, sizeof(name));
+	PrintToServer("[Match] Server profile: %s.", name);
+	CreateTimer(0.5, Timer_EnforceProfile, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+// The current mode isn't allowed (profile changed, or it came from the console):
+// move to Competitive 5v5 (Tournament) or Casual.
+public Action Timer_EnforceProfile(Handle timer)
+{
+	int gm = CurrentMode();
+	if (GmAllowed(gm) || g_SwitchMode >= 0)
+		return Plugin_Stop;
+	int target = g_cvProfile.IntValue == 1 ? GM_Competitive : GM_Casual;
+	char cur[PLATFORM_MAX_PATH], map[PLATFORM_MAX_PATH];
+	GetCurrentMap(cur, sizeof(cur));
+	strcopy(map, sizeof(map), MapFitsMode(target, cur) ? cur : "de_dust2");
+	char name[16];
+	GetProfileName(name, sizeof(name));
+	Announce("This server is in \x04%s\x01 mode - moving to \x04%s\x01.", name, g_GmName[target]);
+	SwitchGameMode(0, target, map);
+	return Plugin_Stop;
+}
+
+public Action Cmd_ServerGamemode(int args)
+{
+	if (args < 2)
+	{
+		PrintToServer("[Match] Usage: match_gamemode <0-9> <map>");
+		return Plugin_Handled;
+	}
+	char a[8], map[PLATFORM_MAX_PATH];
+	GetCmdArg(1, a, sizeof(a));
+	GetCmdArg(2, map, sizeof(map));
+	int gm = StringToInt(a);
+	if (gm < 0 || gm >= GM_COUNT)
+	{
+		PrintToServer("[Match] Unknown mode %s.", a);
+		return Plugin_Handled;
+	}
+	if (gm == GM_Retakes && FindConVar("sm_retakes_enabled") == null)
+	{
+		PrintToServer("[Match] The retakes plugin isn't loaded.");
+		return Plugin_Handled;
+	}
+	if (!CheckGmAllowed(0, gm))
+		return Plugin_Handled;
+	PrintToServer("[Match] Switching to %s on %s in 5 seconds.", g_GmName[gm], map);
+	SwitchGameMode(0, gm, map);
+	return Plugin_Handled;
+}
+
+// maps/modes/<folder>/votepool.txt: only these maps are offered in the map vote
+void ApplyVotePool(int gm, ArrayList maps)
+{
+	if (gm < 0 || gm >= GM_COUNT)
+		return;
+	char path[PLATFORM_MAX_PATH], line[PLATFORM_MAX_PATH], n[PLATFORM_MAX_PATH];
+	Format(path, sizeof(path), "maps/modes/%s/votepool.txt", g_GmFolder[gm]);
+	File f = OpenFile(path, "r");
+	if (f == null)
+		return;
+	StringMap pool = new StringMap();
+	while (f.ReadLine(line, sizeof(line)))
+	{
+		TrimString(line);
+		if (line[0] == '\0' || (line[0] == '/' && line[1] == '/'))
+			continue;
+		StringToLower(line);
+		pool.SetValue(line, 1);
+	}
+	delete f;
+	if (pool.Size > 0)
+	{
+		ArrayList keep = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+		int v;
+		for (int i = 0; i < maps.Length; i++)
+		{
+			maps.GetString(i, path, sizeof(path));
+			MapShortName(path, n, sizeof(n));
+			StringToLower(n);
+			if (pool.GetValue(n, v))
+				keep.PushString(path);
+		}
+		if (keep.Length > 0)
+		{
+			maps.Clear();
+			for (int i = 0; i < keep.Length; i++) { keep.GetString(i, path, sizeof(path)); maps.PushString(path); }
+		}
+		delete keep;
+	}
+	delete pool;
+}
+
 void SwitchGameMode(int client, int gm, const char[] map)
 {
+	if (!CheckGmAllowed(client, gm))
+		return;
 	if (g_State == State_Live || g_State == State_Knife || g_State == State_SideSelect)
 		Announce("\x02The current match will be abandoned.");
 	if (g_SeriesActive || g_VetoRunning)
@@ -4139,7 +4819,10 @@ void SwitchGameMode(int client, int gm, const char[] map)
 
 	g_SwitchMode = gm;
 	strcopy(g_SwitchMap, sizeof(g_SwitchMap), map);
-	Announce("%N is switching to \x04%s\x01 on \x04%s\x01 in 5 seconds...", client, g_GmName[gm], map);
+	if (client > 0)
+		Announce("%N is switching to \x04%s\x01 on \x04%s\x01 in 5 seconds...", client, g_GmName[gm], map);
+	else
+		Announce("Switching to \x04%s\x01 on \x04%s\x01 in 5 seconds...", g_GmName[gm], map);
 	CreateTimer(5.0, Timer_SwitchMode, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
@@ -4201,6 +4884,16 @@ void ShowOptionsMenu(int client)
 {
 	char line[96];
 	Menu menu = new Menu(Handler_Options);
+	if (g_cvProfile.IntValue == 2)
+	{
+		// Casual server: the 5v5 match settings are locked.
+		menu.SetTitle("Options (Casual server - 5v5 match settings are locked)");
+		Format(line, sizeof(line), "Arena pairing: %s", g_cvArenaShuffle.BoolValue ? "Shuffle every round" : "Ladder (win = move up)");
+		menu.AddItem("arenapair", line);
+		menu.ExitBackButton = true;
+		menu.Display(client, MENU_TIME_FOREVER);
+		return;
+	}
 	menu.SetTitle("Match options\n(saved automatically, used for every match)");
 
 	if (g_cvSeries.IntValue == 3)
@@ -4216,8 +4909,11 @@ void ShowOptionsMenu(int client)
 
 	Format(line, sizeof(line), "Knife round: %s", g_KnifeEnabled ? "On" : "Off");
 	menu.AddItem("knife", line);
-	Format(line, sizeof(line), "Arena pairing: %s", g_cvArenaShuffle.BoolValue ? "Shuffle every round" : "Ladder (win = move up)");
-	menu.AddItem("arenapair", line);
+	if (g_cvProfile.IntValue != 1)
+	{
+		Format(line, sizeof(line), "Arena pairing: %s", g_cvArenaShuffle.BoolValue ? "Shuffle every round" : "Ladder (win = move up)");
+		menu.AddItem("arenapair", line);
+	}
 
 	int ready = g_cvReadyRequired.IntValue;
 	if (ready <= 0)
@@ -4722,6 +5418,47 @@ bool ChangeLevelTo(const char[] map)
 	return true;
 }
 
+// Is <map> listed in this mode's maplist.txt? (Maps added from the Workshop in
+// CSGO Server Control.exe go in the list of the category picked there.)
+// The lists are cached and re-read when the file changes.
+StringMap g_ModeListCache[GM_COUNT];
+int g_ModeListTime[GM_COUNT];
+bool MapInModeList(int gm, const char[] map)
+{
+	if (gm < 0 || gm >= GM_COUNT)
+		return false;
+	char path[PLATFORM_MAX_PATH];
+	Format(path, sizeof(path), "maps/modes/%s/maplist.txt", g_GmFolder[gm]);
+	int t = FileExists(path) ? GetFileTime(path, FileTime_LastChange) : 0;
+	if (g_ModeListCache[gm] == null || t != g_ModeListTime[gm])
+	{
+		delete g_ModeListCache[gm];
+		g_ModeListCache[gm] = new StringMap();
+		g_ModeListTime[gm] = t;
+		ArrayList list = new ArrayList(ByteCountToCells(PLATFORM_MAX_PATH));
+		ReadModeMapList(gm, list);
+		char n[PLATFORM_MAX_PATH];
+		for (int i = 0; i < list.Length; i++)
+		{
+			list.GetString(i, n, sizeof(n));
+			StringToLower(n);
+			g_ModeListCache[gm].SetValue(n, 1);
+		}
+		delete list;
+	}
+	char name[PLATFORM_MAX_PATH];
+	MapShortName(map, name, sizeof(name));
+	StringToLower(name);
+	int v;
+	return g_ModeListCache[gm].GetValue(name, v);
+}
+
+void StringToLower(char[] s)
+{
+	for (int i = 0; s[i] != '\0'; i++)
+		s[i] = CharToLower(s[i]);
+}
+
 // Is <map> (any path) a .bsp in this mode's own folder, maps/modes/<folder>/?
 bool MapInModeFolder(int gm, const char[] map)
 {
@@ -4895,6 +5632,11 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 		return;
 	}
 
+	if (!GmAllowed(GM_1v1Match) && !GmAllowed(GM_Arena))
+	{
+		CheckGmAllowed(client, GM_1v1Match);
+		return;
+	}
 	char mode[32];
 	GetModeName(mode, sizeof(mode));
 	bool admin = IsAdmin(client);
@@ -4905,8 +5647,15 @@ void Cmd_OneVOneMenu(int client, const char[] arg)
 		menu.AddItem("duel", "!duel — pick an opponent, then gun, rounds, headshots only");
 	else
 		menu.AddItem("duel", "!duel (only in 1v1 duels / arenas)", ITEMDRAW_DISABLED);
-	menu.AddItem("match", admin ? "1v1 duels — lobby on aim maps, everyone can !duel" : "1v1 duels (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
-	menu.AddItem("arena", admin ? "Multi-1v1 arenas — ladder on am_ maps" : "Multi-1v1 arenas (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	bool duelMaps = GmHasMaps(GM_1v1Match), arenaMaps = GmHasMaps(GM_Arena);
+	if (!duelMaps)
+		menu.AddItem("match", "1v1 duels - no aim maps installed", ITEMDRAW_DISABLED);
+	else
+		menu.AddItem("match", admin ? "1v1 duels — lobby on aim maps, everyone can !duel" : "1v1 duels (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+	if (!arenaMaps)
+		menu.AddItem("arena", "Multi-1v1 arenas - no am_ maps installed", ITEMDRAW_DISABLED);
+	else
+		menu.AddItem("arena", admin ? "Multi-1v1 arenas — ladder on am_ maps" : "Multi-1v1 arenas (admins switch modes)", admin ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	if (g_State == State_Arena)
 		menu.AddItem("guns", "Arena guns (!guns)");
 	menu.Display(client, MENU_TIME_FOREVER);
@@ -6713,20 +7462,41 @@ bool StartVeto()
 		return false;
 	}
 
-	// Teams: whoever is on CT now is team A, T is team B.
+	// Teams: whoever is on CT now is team A, T is team B - or the locked
+	// teams (server_control.bat), names included.
 	g_SeriesRoster.Clear();
-	for (int i = 1; i <= MaxClients; i++)
+	if (g_TeamsLocked && g_TeamLock.Size > 0)
 	{
-		if (!IsClientInGame(i) || IsFakeClient(i))
-			continue;
-		int side = GetClientTeam(i);
-		if (side == CS_TEAM_CT)
-			SetSeriesTeam(i, SERIES_TEAM_A);
-		else if (side == CS_TEAM_T)
-			SetSeriesTeam(i, SERIES_TEAM_B);
+		int sideA = LockedSideOf(0, 0);
+		int teamOnCT = sideA == CS_TEAM_CT ? 0 : 1;
+		StringMapSnapshot snap = g_TeamLock.Snapshot();
+		char key[64];
+		int v;
+		for (int k = 0; k < snap.Length; k++)
+		{
+			snap.GetKey(k, key, sizeof(key));
+			if (g_TeamLock.GetValue(key, v))
+				g_SeriesRoster.SetValue(key, v == teamOnCT ? SERIES_TEAM_A : SERIES_TEAM_B);
+		}
+		delete snap;
+		strcopy(g_SeriesName[SERIES_TEAM_A], sizeof(g_SeriesName[]), g_LockName[teamOnCT]);
+		strcopy(g_SeriesName[SERIES_TEAM_B], sizeof(g_SeriesName[]), g_LockName[1 - teamOnCT]);
 	}
-	PickSeriesName(SERIES_TEAM_A, CS_TEAM_CT);
-	PickSeriesName(SERIES_TEAM_B, CS_TEAM_T);
+	else
+	{
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!IsClientInGame(i) || IsFakeClient(i))
+				continue;
+			int side = GetClientTeam(i);
+			if (side == CS_TEAM_CT)
+				SetSeriesTeam(i, SERIES_TEAM_A);
+			else if (side == CS_TEAM_T)
+				SetSeriesTeam(i, SERIES_TEAM_B);
+		}
+		PickSeriesName(SERIES_TEAM_A, CS_TEAM_CT);
+		PickSeriesName(SERIES_TEAM_B, CS_TEAM_T);
+	}
 
 	// Ban, ban, pick, pick, then ban down to one map: the decider.
 	int bans = g_VetoPool.Length - 3;

@@ -21,48 +21,42 @@ INSTALL (drag and drop)
 -----------------------
 1. Stop the server if it's running.
 
-2. Open this zip and drag the "csgo" folder onto your server folder - the
-   folder that contains srcds.exe (e.g. C:\csgo-server - Live\).
-   When Windows asks, choose "Replace the files in the destination".
-   Everything lands in the right place:
+2. Drag this "csgo" folder onto your server folder - the folder that
+   contains srcds.exe (e.g. C:\csgo-server\). When Windows asks, choose
+   "Replace the files in the destination". Everything lands in the right
+   place:
        csgo\addons\...                  Metamod, SourceMod, plugins, extensions
-       csgo\cfg\...                     SourceMod settings
+       csgo\cfg\...                     server and SourceMod settings
        csgo\maps\modes\...              a map folder per game mode
-       csgo\start_server.bat            the launcher - use this to start
-       csgo\start_fastdl.bat            fast map downloads for players
-       csgo\download_community_maps.bat arena map downloader
-       csgo\uninstall_server_pack.bat   removes the whole pack again
+       csgo\CSGO Server Control.exe      starts, stops and sets up the server
 
    Updating a server you already set up? This pack replaces cfg\server.cfg
    with clean defaults and resets cfg\csgo_match\server_settings.cfg, so
-   start_server.bat runs its setup again on the next start - have your
-   server name and passwords ready. addons\sourcemod\configs\admins.cfg
-   in this pack is empty. If you added admins there, keep your own copy when
-   Windows asks (or just use the admin password from step 3 instead).
+   you'll need to fill in the Setup tab again - have your server name and
+   passwords ready. addons\sourcemod\configs\admins.cfg in this pack is
+   empty. If you added admins there, keep your own copy when Windows asks
+   (or just use the admin password from step 3 instead).
    If an old addons\metamod_x64.vdf is on your server, delete it.
+   Old .bat files from an earlier pack (start_server.bat and friends) can
+   be deleted - CSGO Server Control.exe does their job now.
 
-3. Double-click csgo\start_server.bat. The first time it asks a few
-   questions and saves the answers:
+3. Double-click csgo\CSGO Server Control.exe and fill in the Setup tab:
        server name, join password, RCON password, admin password,
        max players, tickrate, port,
-       default game mode (menu: 5v5, wingman, casual, deathmatch, arms
-       race, demolition, practice, 1v1 duels, arenas or retakes) and the first
-       map (menu of that mode's maps, or type a name),
+       default game mode (5v5, wingman, casual, deathmatch, arms race,
+       demolition, practice, 1v1 duels, arenas or retakes) and first map,
        LAN / virtual LAN or internet (+ login token for internet),
        the address players download maps from (your public IP for
        internet - it's filled in for you), auto-download maps, FastDL,
        auto-restart, and - if players' skin / loadout preferences from an
-       earlier install are found (kept by the uninstaller, or in one of its
-       _server_pack_backup_ folders) - whether to use them
-   Press Enter to keep the value in [brackets] - it picks up your current
-   values. The setup owns these settings: if server.cfg or autoexec.cfg
-   also sets the name, a password, sv_lan or the download address, it
-   comments those lines out so they can't override your answers (an old
-   "sv_lan 1" in server.cfg is what makes internet players get "restricts
-   clients to internal local area network only"). After that, start_server.bat just starts everything:
-   downloads missing maps, starts FastDL, starts the server and restarts it
-   if it crashes. FastDL asks for admin rights once, the very first time.
-   Change your answers later with:  start_server.bat setup
+       earlier install are found - whether to use them.
+   Click "Save setup". The setup owns these settings: if server.cfg or
+   autoexec.cfg also sets the name, a password, sv_lan or the download
+   address, it comments those lines out so they can't override your
+   answers (an old "sv_lan 1" in server.cfg is what makes internet players
+   get "restricts clients to internal local area network only").
+   Then press Start. The program downloads missing maps, starts FastDL,
+   starts the server, shows its console and restarts it if it crashes.
 
 4. In game: /login <admin password> in chat to become admin.
 
@@ -104,7 +98,7 @@ CS:GO is no longer supported by Valve, so internet play takes a few steps.
 A virtual LAN (Tailscale, ZeroTier) avoids all of them: pick LAN in the
 setup and friends connect to your virtual-LAN IP.
 
-  1. start_server.bat setup -> choose 2 (Internet), enter a login token
+  1. Setup tab in CSGO Server Control.exe -> choose Internet, enter a login token
      (steamcommunity.com/dev/managegameservers, App ID 730) and check the
      public IP it found. It adds a Windows Firewall rule for the game port
      (asks for admin).
@@ -161,16 +155,17 @@ because they clash with this pack's own plugins:
 
 Not included: the repo's maps and graffiti package is a Google Drive
 download, not part of the repo - get it from the link in the repo's README
-if you want those maps. Its start.bat is replaced by start_server.bat.
+if you want those maps. Its start.bat isn't needed - use CSGO Server
+Control.exe.
 
 UNINSTALL / BACK TO PLAIN CS:GO
 -------------------------------
-  csgo\uninstall_server_pack.bat removes everything this pack added:
-  Metamod, SourceMod (plugins, extensions, logs), the
-  pack's cfgs (cfg\csgo_match, cfg\sourcemod, server.cfg, ESL cfgs),
-  GameModes_Server.txt, the spray images, the launcher/FastDL/downloader
-  scripts and launcher_settings.cmd. It also offers to remove the Windows
-  Firewall rules and port permission FastDL and the setup added.
+  The Uninstall button in CSGO Server Control.exe removes everything this
+  pack added: Metamod, SourceMod (plugins, extensions, logs), the pack's
+  cfgs (cfg\csgo_match, cfg\sourcemod, server.cfg, ESL cfgs),
+  GameModes_Server.txt, the spray images, the program itself and
+  launcher_settings.cmd. It also offers to remove the Windows Firewall
+  rules and port permission FastDL and the setup added.
   - Close the server first.
   - It lists everything and asks before doing anything.
   - Community maps (maps\modes) are kept unless you say otherwise.
@@ -183,10 +178,11 @@ UNINSTALL / BACK TO PLAIN CS:GO
     to remove it for good.
   - Never touched: the game, steam.inf, mapcycle.txt, maplist.txt and the
     official maps.
-  - Option: keep start_server.bat. The server then still starts the same
-    way (same name, passwords, LAN/internet, FastDL, map downloader) but as
-    plain CS:GO without Metamod, SourceMod or plugins. server.cfg is set to
-    load your settings. Run the uninstaller again to remove the launcher too.
+  - Option: keep CSGO Server Control.exe. The server then still starts the
+    same way (same name, passwords, LAN/internet, FastDL, map downloader)
+    but as plain CS:GO without Metamod, SourceMod or plugins. server.cfg is
+    set to load your settings. Run the uninstaller again to remove the
+    program too.
 
 MAP FOLDERS
 -----------
@@ -206,10 +202,10 @@ the map menu when that mode is picked in !gamemode or !1v1:
   csgo\maps\modes\retakes\        Retakes
 
 The game only loads maps reliably from csgo\maps itself (and its Workshop
-folder), so start_server.bat copies every .bsp / .nav from the mode folders
+folder), so CSGO Server Control.exe copies every .bsp / .nav from the mode folders
 into csgo\maps before each start. Maps already in csgo\maps (e.g. the
 official ones) are never overwritten; the copies are listed in
-maps\modes\copied_to_maps.txt and removed by uninstall_server_pack.bat. A
+maps\modes\copied_to_maps.txt and removed by the Uninstall button in CSGO Server Control.exe. A
 map you add while the server runs is copied when it's picked.
 
 Each folder also has a maplist.txt of standard maps for that mode. Installed
@@ -225,20 +221,25 @@ as "(not installed)" so you know what to get. Edit maplist.txt to change it.
   Arms Race    ar_baggage ar_shoots ar_monastery ar_pool_day
   Demolition   de_lake de_safehouse de_bank de_shortnuke
   Practice     de_mirage de_inferno de_dust2 de_nuke de_ancient
-  1v1 duels    aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars
+  1v1 duels    none by default - suggested (tick them in the Maps tab):
+               aim_redline aim_map aim_map_pro awp_lego_2 aim_pillars
                awp_india_csgo aim_biove_texture aim_crashz_dust_1on1
-               aim_map_usp_s aim_dust_go                     (Workshop)
-  Arenas       am_must2 am_dust2 am_texture2 am_aztec2 am_grass2
+               aim_map_usp_s                                 (Workshop)
+  Arenas       none by default - suggested (tick them in the Maps tab):
+               am_must2 am_dust2 am_texture2 am_aztec2 am_grass2
                am_warehouse2 am_water am_trainyard am_skybound
                am_crashz_dust am_inferno_banana_dolnma       (Workshop)
 
 The official maps are already installed with the server. The community
-maps (1v1 aim maps and arenas) don't come with CS:GO and aren't included
-in this pack. To get them:
+maps (1v1 aim maps and arenas) don't come with CS:GO and nothing is
+downloaded unless you ask for it. Until a mode has at least one map, it is
+greyed out ("no maps installed") in !gamemode and !1v1. To add them:
 
-  download_community_maps.bat
-    Put it in your csgo folder (it comes with this pack, next to "maps")
-    and double-click it (start_server.bat also runs it on every start).
+  CSGO Server Control.exe - Maps tab
+    Click "Suggested maps...", tick the ones you want and click "Download
+    ticked" - or paste any Workshop map link. Ticked maps that go missing
+    later are downloaded again on Start ("Download missing maps on start"
+    in the Setup tab).
     For every map in the 1v1 and arena downloads.txt files it finds the
     CS:GO version on the Steam Workshop (or varq.net), downloads it,
     unpacks it and puts the .bsp (and .nav) in csgo\maps - the same place
@@ -264,18 +265,14 @@ PLAYERS GETTING THE MAPS
   CS:GO's built-in download is too slow for big maps (it times out and
   starts again), so use FastDL:
 
-  start_server.bat  (recommended - starts FastDL with the server)
-    Each time, it first downloads any community maps
-    that are missing (AUTO_DOWNLOAD_MAPS=1 - maps you have are skipped, so
-    this is quick), then starts FastDL in a minimized window, starts
-    srcds.exe, restarts the server if it crashes (AUTO_RESTART=1), and
-    stops FastDL when the server is done.
-
-  start_fastdl.bat
-    The FastDL web server itself (start_server.bat runs it for you, or run
-    it on its own). The very first run asks for admin rights once to open
-    port 27020 in Windows Firewall. The download address comes from the
-    setup (cfg\csgo_match\fastdl.cfg). After that it runs without admin. Players who
+  CSGO Server Control.exe - FastDL (Setup tab, on by default)
+    Each time you press Start it first downloads any community maps that
+    are missing (maps you have are skipped, so this is quick), then starts
+    FastDL, starts srcds.exe, restarts the server if it crashes and stops
+    FastDL when the server stops.
+    FastDL is a small web server on this PC. The first time it asks for
+    admin rights once to open port 27020 in Windows Firewall. The download
+    address comes from the setup (cfg\csgo_match\fastdl.cfg). Players who
     don't have a map download it quickly from this PC.
     Only map content is shared (maps, materials, models, sound, particles,
     resource folders) - not configs or anything else.
@@ -390,7 +387,7 @@ Game modes (admins)
   console, admins get a warning.
 
   The chosen mode stays across map changes. Restarting the server goes back
-  to the default game mode and first map picked in start_server.bat setup.
+  to the default game mode and first map picked in the Setup tab in CSGO Server Control.exe.
   In Casual, Arms Race and Demolition the game runs its own rules (minus
   warmup); the ready-up commands only apply in Competitive and Wingman.
   Deathmatch is free-for-all (everyone against everyone, random spawns),
@@ -489,7 +486,7 @@ Match - practice mode
   (no respawning in place, so nobody gets spawn-trapped).
   For lots of 1v1s at the same time, use Multi-1v1 arenas instead.
   Maps: only 1v1 aim maps - the Workshop maps listed in maps\modes\1v1
-  (fetched into csgo\maps by download_community_maps.bat) and any aim_ /
+  (fetched into csgo\maps by the Maps tab in CSGO Server Control.exe) and any aim_ /
   awp_ / 1v1_ maps on the server. No normal de_ maps.
 
 Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
@@ -505,7 +502,7 @@ Multi-1v1 arenas (server mode, set with !1v1 or !gamemode)
   out of the shuffle until the duel is won (or someone types !forfeit).
   Everyone else keeps shuffling. Up to 8 duels can run at once.
   Arena maps: the Workshop am_ maps in maps\modes\arena (fetched by
-  download_community_maps.bat) and any am_ maps on the server. On a normal
+  the Maps tab in CSGO Server Control.exe) and any am_ maps on the server. On a normal
   map there is just one arena.
   !guns                 choose your rifle, pistol and whether you want AWP
                         rounds (saved for next time)
@@ -586,7 +583,7 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
                                        also loads cfg\csgo_match\fastdl.cfg)
   match_max_download_mb               (largest map sent to players, MB)
   match_admin_password                (for /login; empty = off - set by
-                                       start_server.bat setup)
+                                       the Setup tab in CSGO Server Control.exe)
   match_series_maps                   (1 = single map, 3 = best of 3)
   match_veto_time                     (seconds per best-of-3 map vote)
   match_arena_shuffle                 (1 = shuffle arena pairs every round,
@@ -597,11 +594,14 @@ MATCH SETTINGS (cfg\sourcemod\csgo_match.cfg)
   match_dm_kill_hp                    (HP per kill in Deathmatch, 50)
   match_rtv_enabled                   (1 = !rtv and !rtg allowed)
   match_rtv_ratio                     (share of players needed, 0.6)
+  Server command (console / RCON): match_restart_notice <seconds> tells
+  players the server restarts soon (chat + middle of the screen, countdown
+  for the last 10 s; 0 = "now"). CSGO Server Control.exe uses it.
 
 
 RETAKES
 -------
-Pick "Retakes" in !gamemode (or as the default mode in start_server.bat
+Pick "Retakes" in !gamemode (or as the default mode in CSGO Server Control.exe
 setup). Nobody carries a bomb: every round it's already planted on a
 random site (insta plant) and the CTs have to retake it. Teams are balanced automatically; players
 waiting for a slot join next round. Up to 9 players (sm_retakes_maxplayers).
@@ -688,8 +688,8 @@ ADMIN ACCESS
 Admin commands need the "b" or "z" flag. Two ways to get it:
 
 1. Password login (works in LAN mode, where SteamIDs can't be checked)
-   start_server.bat's setup asks for the admin password (change it with
-   "start_server.bat setup"; it's saved in cfg\csgo_match\server_settings.cfg).
+   CSGO Server Control.exe's setup asks for the admin password (change it with
+   "the Setup tab in CSGO Server Control.exe"; it's saved in cfg\csgo_match\server_settings.cfg).
    Then in game type in chat:   /login your-admin-password
    (the / keeps it out of chat - !login and .login are hidden too)
    You get full admin, and that PC is remembered so you're logged in
